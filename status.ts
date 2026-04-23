@@ -30,6 +30,15 @@ const SEGMENT_SEPARATOR = "·";
 const FIVE_HOUR_LABEL = "5h:";
 const SEVEN_DAY_LABEL = "7d:";
 
+function isStaleContextError(error: unknown): boolean {
+	return (
+		error instanceof Error &&
+		error.message.includes(
+			"This extension instance is stale after session replacement or reload",
+		)
+	);
+}
+
 type MaybeModel = Model<Api> | undefined;
 export type PercentDisplayMode = "left" | "used";
 export type ResetWindowMode = "5h" | "7d" | "both";
@@ -353,13 +362,40 @@ export function createUsageStatusController(accountManager: AccountManager) {
 	let preferences: FooterPreferences = DEFAULT_PREFERENCES;
 	let livePreviewPreferences: FooterPreferences | undefined;
 
+	function abandonContext(ctx: ExtensionContext): void {
+		if (activeContext === ctx) {
+			activeContext = undefined;
+		}
+	}
+
+	function withLiveContext<T>(
+		ctx: ExtensionContext,
+		action: () => T,
+		fallback: T,
+	): T {
+		try {
+			return action();
+		} catch (error) {
+			if (isStaleContextError(error)) {
+				abandonContext(ctx);
+				return fallback;
+			}
+			throw error;
+		}
+	}
+
 	accountManager.onStateChange(() => {
 		if (!activeContext) return;
 		renderCachedStatus(activeContext, livePreviewPreferences ?? preferences);
 	});
 
 	function clearStatus(ctx?: ExtensionContext): void {
-		ctx?.ui.setStatus(STATUS_KEY, undefined);
+		if (!ctx) return;
+		withLiveContext(
+			ctx,
+			() => ctx.ui.setStatus(STATUS_KEY, undefined),
+			undefined,
+		);
 	}
 
 	async function ensurePreferencesLoaded(): Promise<void> {
@@ -370,19 +406,28 @@ export function createUsageStatusController(accountManager: AccountManager) {
 		ctx: ExtensionContext,
 		preferencesOverride?: FooterPreferences,
 	): string | undefined {
-		if (!ctx.hasUI) return undefined;
+		if (!withLiveContext(ctx, () => ctx.hasUI, false)) return undefined;
 		if (!isManagedModel(ctx.model)) return undefined;
 
 		const activeAccount = accountManager.getActiveAccount();
 		if (!activeAccount) {
-			return ctx.ui.theme.fg("warning", "Multicodex no active account");
+			return withLiveContext(
+				ctx,
+				() => ctx.ui.theme.fg("warning", "Multicodex no active account"),
+				undefined,
+			);
 		}
 
-		return formatActiveAccountStatus(
+		return withLiveContext(
 			ctx,
-			activeAccount.email,
-			accountManager.getCachedUsage(activeAccount.email),
-			preferencesOverride ?? preferences,
+			() =>
+				formatActiveAccountStatus(
+					ctx,
+					activeAccount.email,
+					accountManager.getCachedUsage(activeAccount.email),
+					preferencesOverride ?? preferences,
+				),
+			undefined,
 		);
 	}
 
@@ -390,7 +435,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 		ctx: ExtensionContext,
 		preferencesOverride?: FooterPreferences,
 	): void {
-		if (!ctx.hasUI) return;
+		if (!withLiveContext(ctx, () => ctx.hasUI, false)) return;
 		if (!isManagedModel(ctx.model)) {
 			clearStatus(ctx);
 			return;
@@ -398,12 +443,12 @@ export function createUsageStatusController(accountManager: AccountManager) {
 
 		const text = getStatusText(ctx, preferencesOverride);
 		if (text) {
-			ctx.ui.setStatus(STATUS_KEY, text);
+			withLiveContext(ctx, () => ctx.ui.setStatus(STATUS_KEY, text), undefined);
 		}
 	}
 
 	async function updateStatus(ctx: ExtensionContext): Promise<void> {
-		if (!ctx.hasUI) return;
+		if (!withLiveContext(ctx, () => ctx.hasUI, false)) return;
 		if (!isManagedModel(ctx.model)) {
 			clearStatus(ctx);
 			return;
@@ -413,9 +458,14 @@ export function createUsageStatusController(accountManager: AccountManager) {
 
 		const activeAccount = accountManager.getActiveAccount();
 		if (!activeAccount) {
-			ctx.ui.setStatus(
-				STATUS_KEY,
-				ctx.ui.theme.fg("warning", "Multicodex no active account"),
+			withLiveContext(
+				ctx,
+				() =>
+					ctx.ui.setStatus(
+						STATUS_KEY,
+						ctx.ui.theme.fg("warning", "Multicodex no active account"),
+					),
+				undefined,
 			);
 			return;
 		}
@@ -424,14 +474,19 @@ export function createUsageStatusController(accountManager: AccountManager) {
 		const usage =
 			(await accountManager.refreshUsageForAccount(activeAccount)) ??
 			cachedUsage;
-		ctx.ui.setStatus(
-			STATUS_KEY,
-			formatActiveAccountStatus(
-				ctx,
-				activeAccount.email,
-				usage,
-				livePreviewPreferences ?? preferences,
-			),
+		withLiveContext(
+			ctx,
+			() =>
+				ctx.ui.setStatus(
+					STATUS_KEY,
+					formatActiveAccountStatus(
+						ctx,
+						activeAccount.email,
+						usage,
+						livePreviewPreferences ?? preferences,
+					),
+				),
+			undefined,
 		);
 	}
 
@@ -496,10 +551,17 @@ export function createUsageStatusController(accountManager: AccountManager) {
 			await ensurePreferencesLoaded();
 		} catch (error) {
 			preferences = DEFAULT_PREFERENCES;
-			ctx?.ui.notify(
-				`Multicodex: failed to load ${SETTINGS_FILE}: ${String(error)}`,
-				"warning",
-			);
+			if (ctx) {
+				withLiveContext(
+					ctx,
+					() =>
+						ctx.ui.notify(
+							`Multicodex: failed to load ${SETTINGS_FILE}: ${String(error)}`,
+							"warning",
+						),
+					undefined,
+				);
+			}
 		}
 	}
 

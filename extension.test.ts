@@ -136,4 +136,31 @@ describe("multicodexExtension", () => {
 		sessionShutdown?.({}, ctx as never);
 		expect(mocks.statusStopAutoRefresh).toHaveBeenCalledWith(ctx);
 	});
+
+	it("swallows stale-context warning notifications", () => {
+		const handlers = new Map<string, (...args: unknown[]) => void>();
+		let warningHandler: ((message: string) => void) | undefined;
+		mocks.setWarningHandler.mockImplementation((handler) => {
+			warningHandler = handler;
+		});
+		const staleCtx = {
+			ui: {
+				notify: vi.fn(() => {
+					throw new Error(
+						"This extension instance is stale after session replacement or reload. Use the provided replacement-session context instead.",
+					);
+				}),
+			},
+		};
+
+		multicodexExtension({
+			registerProvider: vi.fn(),
+			on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+				handlers.set(event, handler);
+			}),
+		} as never);
+
+		handlers.get("session_start")?.({}, staleCtx as never);
+		expect(() => warningHandler?.("reauth required")).not.toThrow();
+	});
 });

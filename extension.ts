@@ -13,10 +13,33 @@ export default function multicodexExtension(pi: ExtensionAPI) {
 	const statusController = createUsageStatusController(accountManager);
 	let lastContext: ExtensionContext | undefined;
 
-	accountManager.setWarningHandler((message) => {
-		if (lastContext) {
-			lastContext.ui.notify(message, "warning");
+	function isStaleContextError(error: unknown): boolean {
+		return (
+			error instanceof Error &&
+			error.message.includes(
+				"This extension instance is stale after session replacement or reload",
+			)
+		);
+	}
+
+	function notifyWarning(
+		ctx: ExtensionContext | undefined,
+		message: string,
+	): void {
+		if (!ctx) return;
+		try {
+			ctx.ui.notify(message, "warning");
+		} catch (error) {
+			if (isStaleContextError(error)) {
+				if (lastContext === ctx) lastContext = undefined;
+				return;
+			}
+			throw error;
 		}
+	}
+
+	accountManager.setWarningHandler((message) => {
+		notifyWarning(lastContext, message);
 	});
 
 	pi.registerProvider(
@@ -29,7 +52,7 @@ export default function multicodexExtension(pi: ExtensionAPI) {
 	pi.on("session_start", (_event: unknown, ctx: ExtensionContext) => {
 		lastContext = ctx;
 		accountManager.resetSessionWarnings();
-		handleSessionStart(accountManager, (msg) => ctx.ui.notify(msg, "warning"));
+		handleSessionStart(accountManager, (msg) => notifyWarning(ctx, msg));
 		statusController.startAutoRefresh();
 		void (async () => {
 			await statusController.loadPreferences(ctx);
@@ -44,7 +67,7 @@ export default function multicodexExtension(pi: ExtensionAPI) {
 			if (event.reason === "new") {
 				accountManager.resetSessionWarnings();
 				handleNewSessionSwitch(accountManager, (msg) =>
-					ctx.ui.notify(msg, "warning"),
+					notifyWarning(ctx, msg),
 				);
 			}
 			void statusController.refreshFor(ctx);
@@ -62,6 +85,9 @@ export default function multicodexExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("session_shutdown", (_event: unknown, ctx: ExtensionContext) => {
+		if (lastContext === ctx) {
+			lastContext = undefined;
+		}
 		statusController.stopAutoRefresh(ctx);
 	});
 }

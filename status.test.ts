@@ -19,10 +19,31 @@ function createContext(overrides?: {
 	setStatus?: ReturnType<typeof vi.fn>;
 	notify?: ReturnType<typeof vi.fn>;
 	color?: (token: string, text: string) => string;
+	stale?: boolean;
 }) {
 	const setStatus = overrides?.setStatus ?? vi.fn();
 	const notify = overrides?.notify ?? vi.fn();
 	const color = overrides?.color ?? ((_token: string, text: string) => text);
+	if (overrides?.stale) {
+		return {
+			model: {
+				provider: overrides?.provider ?? "openai-codex",
+			},
+			get hasUI() {
+				throw new Error(
+					"This extension instance is stale after session replacement or reload. Use the provided replacement-session context instead.",
+				);
+			},
+			ui: {
+				setStatus,
+				notify,
+				theme: {
+					fg: color,
+					bold: (text: string) => text,
+				},
+			},
+		} as never;
+	}
 	return {
 		hasUI: true,
 		model: {
@@ -338,5 +359,20 @@ describe("createUsageStatusController", () => {
 			"multicodex-usage",
 			expect.stringContaining("5h:95% left"),
 		);
+	});
+
+	it("quietly abandons stale contexts instead of crashing", async () => {
+		const setStatus = vi.fn();
+		const controller = createUsageStatusController({
+			onStateChange: () => () => undefined,
+			getActiveAccount: () => ({ email: "a@example.com" }),
+			getCachedUsage: vi.fn(),
+			refreshUsageForAccount: vi.fn(),
+		} as never);
+
+		await expect(
+			controller.refreshFor(createContext({ stale: true, setStatus })),
+		).resolves.toBeUndefined();
+		expect(setStatus).not.toHaveBeenCalled();
 	});
 });
