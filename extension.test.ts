@@ -163,4 +163,31 @@ describe("multicodexExtension", () => {
 		handlers.get("session_start")?.({}, staleCtx as never);
 		expect(() => warningHandler?.("reauth required")).not.toThrow();
 	});
+
+	it("swallows current pi stale ctx warning notifications", () => {
+		const handlers = new Map<string, (...args: unknown[]) => void>();
+		let warningHandler: ((message: string) => void) | undefined;
+		mocks.setWarningHandler.mockImplementation((handler) => {
+			warningHandler = handler;
+		});
+		const staleCtx = {
+			ui: {
+				notify: vi.fn(() => {
+					throw new Error(
+						"This extension ctx is stale after session replacement or reload. Do not use a captured pi or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload().",
+					);
+				}),
+			},
+		};
+
+		multicodexExtension({
+			registerProvider: vi.fn(),
+			on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+				handlers.set(event, handler);
+			}),
+		} as never);
+
+		handlers.get("session_start")?.({}, staleCtx as never);
+		expect(() => warningHandler?.("reauth required")).not.toThrow();
+	});
 });

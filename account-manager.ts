@@ -21,6 +21,11 @@ const QUOTA_COOLDOWN_MS = 60 * 60 * 1000;
 type WarningHandler = (message: string) => void;
 type StateChangeHandler = () => void;
 
+function isAbortError(error: unknown): boolean {
+	if (!(error instanceof Error)) return false;
+	return error.name === "AbortError" || /\babort(?:ed)?\b/i.test(error.message);
+}
+
 export class AccountManager {
 	private data: StorageData;
 	private piAuthAccount?: Account;
@@ -357,6 +362,9 @@ export class AccountManager {
 			this.notifyStateChanged();
 			return usage;
 		} catch (error) {
+			if (options?.signal?.aborted || isAbortError(error)) {
+				return undefined;
+			}
 			this.warningHandler?.(
 				`Multicodex: failed to fetch usage for ${account.email}: ${normalizeUnknownError(
 					error,

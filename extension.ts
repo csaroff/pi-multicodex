@@ -16,8 +16,8 @@ export default function multicodexExtension(pi: ExtensionAPI) {
 	function isStaleContextError(error: unknown): boolean {
 		return (
 			error instanceof Error &&
-			error.message.includes(
-				"This extension instance is stale after session replacement or reload",
+			/This extension (?:instance|ctx) is stale after session replacement or reload/.test(
+				error.message,
 			)
 		);
 	}

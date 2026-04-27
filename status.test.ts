@@ -19,19 +19,20 @@ function createContext(overrides?: {
 	setStatus?: ReturnType<typeof vi.fn>;
 	notify?: ReturnType<typeof vi.fn>;
 	color?: (token: string, text: string) => string;
-	stale?: boolean;
+	stale?: "ctx" | "instance" | boolean;
 }) {
 	const setStatus = overrides?.setStatus ?? vi.fn();
 	const notify = overrides?.notify ?? vi.fn();
 	const color = overrides?.color ?? ((_token: string, text: string) => text);
 	if (overrides?.stale) {
+		const staleKind = overrides.stale === "instance" ? "instance" : "ctx";
 		return {
 			model: {
 				provider: overrides?.provider ?? "openai-codex",
 			},
 			get hasUI() {
 				throw new Error(
-					"This extension instance is stale after session replacement or reload. Use the provided replacement-session context instead.",
+					`This extension ${staleKind} is stale after session replacement or reload. Use the provided replacement-session context instead.`,
 				);
 			},
 			ui: {
@@ -372,6 +373,21 @@ describe("createUsageStatusController", () => {
 
 		await expect(
 			controller.refreshFor(createContext({ stale: true, setStatus })),
+		).resolves.toBeUndefined();
+		expect(setStatus).not.toHaveBeenCalled();
+	});
+
+	it("recognizes the current pi stale ctx error wording", async () => {
+		const setStatus = vi.fn();
+		const controller = createUsageStatusController({
+			onStateChange: () => () => undefined,
+			getActiveAccount: () => ({ email: "a@example.com" }),
+			getCachedUsage: vi.fn(),
+			refreshUsageForAccount: vi.fn(),
+		} as never);
+
+		await expect(
+			controller.refreshFor(createContext({ stale: "ctx", setStatus })),
 		).resolves.toBeUndefined();
 		expect(setStatus).not.toHaveBeenCalled();
 	});

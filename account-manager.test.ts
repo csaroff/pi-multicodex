@@ -28,6 +28,33 @@ vi.mock("@mariozechner/pi-ai/oauth", () => ({
 
 import { AccountManager } from "./account-manager";
 
+describe("AccountManager usage warnings", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mocks.storageData.accounts = [];
+		mocks.storageData.activeEmail = undefined;
+		mocks.loadImportedOpenAICodexAuth.mockResolvedValue(undefined);
+	});
+
+	it("does not warn when usage refresh is aborted", async () => {
+		const manager = new AccountManager();
+		const warningHandler = vi.fn();
+		manager.setWarningHandler(warningHandler);
+		const account = manager.addOrUpdateAccount("abort@example.com", {
+			access: "access",
+			refresh: "refresh",
+			expires: Date.now() + 3600_000,
+		});
+		const controller = new AbortController();
+		controller.abort();
+
+		await expect(
+			manager.refreshUsageForAccount(account, { signal: controller.signal }),
+		).resolves.toBeUndefined();
+		expect(warningHandler).not.toHaveBeenCalled();
+	});
+});
+
 describe("AccountManager ephemeral pi auth", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
