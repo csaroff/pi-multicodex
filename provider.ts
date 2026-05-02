@@ -1,4 +1,8 @@
-import { getApiProvider } from "@mariozechner/pi-ai";
+import {
+	getApiProvider,
+	getModels,
+	type ThinkingLevelMap,
+} from "@mariozechner/pi-ai";
 import { mirrorProvider } from "pi-provider-utils/providers";
 import type { AccountManager } from "./account-manager";
 import { createStreamWrapper } from "./stream-wrapper";
@@ -9,6 +13,7 @@ export interface ProviderModelDef {
 	id: string;
 	name: string;
 	reasoning: boolean;
+	thinkingLevelMap?: ThinkingLevelMap;
 	input: ("text" | "image")[];
 	cost: {
 		input: number;
@@ -25,15 +30,19 @@ export function getOpenAICodexMirror(): {
 	models: ProviderModelDef[];
 } {
 	const mirror = mirrorProvider("openai-codex");
-	if (!mirror) {
+	const sourceModels = getModels("openai-codex");
+	if (!mirror || sourceModels.length === 0) {
 		return { baseUrl: "https://chatgpt.com/backend-api", models: [] };
 	}
 	return {
 		baseUrl: mirror.baseUrl,
-		models: mirror.models.map((m) => ({
+		models: sourceModels.map((m) => ({
 			id: m.id,
 			name: m.name,
 			reasoning: m.reasoning,
+			thinkingLevelMap: m.thinkingLevelMap
+				? { ...m.thinkingLevelMap }
+				: undefined,
 			input: [...m.input],
 			cost: { ...m.cost },
 			contextWindow: m.contextWindow,

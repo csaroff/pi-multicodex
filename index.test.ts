@@ -46,6 +46,7 @@ describe("getOpenAICodexMirror", () => {
 				id: m.id,
 				name: m.name,
 				reasoning: m.reasoning,
+				thinkingLevelMap: m.thinkingLevelMap,
 				input: m.input,
 				cost: m.cost,
 				contextWindow: m.contextWindow,
@@ -54,6 +55,21 @@ describe("getOpenAICodexMirror", () => {
 		};
 
 		expect(getOpenAICodexMirror()).toEqual(expected);
+	});
+
+	it("preserves source model thinkingLevelMap metadata", () => {
+		const sourceWithMap = getModels("openai-codex").find(
+			(model) => model.thinkingLevelMap,
+		);
+		expect(sourceWithMap).toBeDefined();
+
+		const mirrored = getOpenAICodexMirror().models.find(
+			(model) => model.id === sourceWithMap?.id,
+		);
+		expect(mirrored?.thinkingLevelMap).toEqual(sourceWithMap?.thinkingLevelMap);
+		expect(mirrored?.thinkingLevelMap).not.toBe(
+			sourceWithMap?.thinkingLevelMap,
+		);
 	});
 });
 
