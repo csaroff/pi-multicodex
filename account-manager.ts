@@ -567,13 +567,17 @@ export class AccountManager {
 			this.notifyStateChanged();
 			return usage;
 		} catch (error) {
-			if (options?.signal?.aborted || isAbortError(error)) {
+			const message = normalizeUnknownError(error);
+			if (
+				options?.signal?.aborted ||
+				isAbortError(error) ||
+				message === "fetch failed" ||
+				message === "operation was aborted"
+			) {
 				return undefined;
 			}
 			this.warningHandler?.(
-				`Multicodex: failed to fetch usage for ${account.email}: ${normalizeUnknownError(
-					error,
-				)}`,
+				`Multicodex: failed to fetch usage for ${account.email}: ${message}`,
 			);
 			return undefined;
 		}
