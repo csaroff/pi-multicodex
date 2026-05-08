@@ -2,7 +2,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 	SessionStartEvent,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import { AccountManager } from "./account-manager";
 import { registerCommands } from "./commands";
 import { handleNewSessionSwitch, handleSessionStart } from "./hooks";
@@ -45,7 +45,9 @@ export default function multicodexExtension(pi: ExtensionAPI) {
 
 	pi.registerProvider(
 		PROVIDER_ID,
-		buildMulticodexProviderConfig(accountManager),
+		buildMulticodexProviderConfig(accountManager) as unknown as Parameters<
+			typeof pi.registerProvider
+		>[1],
 	);
 
 	registerCommands(pi, accountManager, statusController);

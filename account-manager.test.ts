@@ -22,7 +22,7 @@ vi.mock("./auth", () => ({
 	loadImportedOpenAICodexAuth: mocks.loadImportedOpenAICodexAuth,
 }));
 
-vi.mock("@mariozechner/pi-ai/oauth", () => ({
+vi.mock("@earendil-works/pi-ai/oauth", () => ({
 	refreshOpenAICodexToken: vi.fn(),
 }));
 

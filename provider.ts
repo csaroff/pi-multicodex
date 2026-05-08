@@ -2,7 +2,7 @@ import {
 	getApiProvider,
 	getModels,
 	type ThinkingLevelMap,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import { mirrorProvider } from "pi-provider-utils/providers";
 import type { AccountManager } from "./account-manager";
 import { createStreamWrapper } from "./stream-wrapper";
