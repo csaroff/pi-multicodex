@@ -1,5 +1,5 @@
 export function isQuotaErrorMessage(message: string): boolean {
-	return /\b429\b|quota|usage limit|rate.?limit|too many requests|limit reached/i.test(
+	return /\b429\b|quota|usage limits?|rate.?limit|too many requests|limits? reached/i.test(
 		message,
 	);
 }

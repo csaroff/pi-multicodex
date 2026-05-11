@@ -104,36 +104,53 @@ export function createStreamWrapper(
 
 					let forwardedAny = false;
 					let retry = false;
+					const rotateAfterQuota = async () => {
+						await accountManager.handleQuotaExceeded(account, {
+							signal: options?.signal,
+						});
+						if (usingManual) {
+							accountManager.clearManualAccount();
+						}
+						excludedEmails.add(account.email);
+						abortController.abort();
+						retry = true;
+					};
 
-					for await (const event of inner) {
-						if (event.type === "error") {
-							const msg = event.error.errorMessage || "";
-							const isQuota = isQuotaErrorMessage(msg);
+					try {
+						for await (const event of inner) {
+							if (event.type === "error") {
+								const msg = event.error.errorMessage || "";
+								const isQuota = isQuotaErrorMessage(msg);
 
-							if (isQuota && !forwardedAny && attempt < MAX_ROTATION_RETRIES) {
-								await accountManager.handleQuotaExceeded(account, {
-									signal: options?.signal,
-								});
-								if (usingManual) {
-									accountManager.clearManualAccount();
+								if (
+									isQuota &&
+									!forwardedAny &&
+									attempt < MAX_ROTATION_RETRIES
+								) {
+									await rotateAfterQuota();
+									break;
 								}
-								excludedEmails.add(account.email);
-								abortController.abort();
-								retry = true;
-								break;
+
+								stream.push(rewriteProviderOnEvent(event, model.provider));
+								stream.end();
+								return;
 							}
 
+							forwardedAny = true;
 							stream.push(rewriteProviderOnEvent(event, model.provider));
-							stream.end();
-							return;
+
+							if (event.type === "done") {
+								stream.end();
+								return;
+							}
 						}
+					} catch (error) {
+						const isQuota = isQuotaErrorMessage(normalizeUnknownError(error));
 
-						forwardedAny = true;
-						stream.push(rewriteProviderOnEvent(event, model.provider));
-
-						if (event.type === "done") {
-							stream.end();
-							return;
+						if (isQuota && !forwardedAny && attempt < MAX_ROTATION_RETRIES) {
+							await rotateAfterQuota();
+						} else {
+							throw error;
 						}
 					}
 

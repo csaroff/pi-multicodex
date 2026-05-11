@@ -31,6 +31,10 @@ describe("isQuotaErrorMessage", () => {
 		expect(isQuotaErrorMessage("Rate-Limit: exceeded")).toBe(true);
 	});
 
+	it("matches plural limit reached phrasing", () => {
+		expect(isQuotaErrorMessage("limits reached")).toBe(true);
+	});
+
 	it("does not match unrelated errors", () => {
 		expect(isQuotaErrorMessage("network error")).toBe(false);
 		expect(isQuotaErrorMessage("bad request")).toBe(false);
@@ -493,6 +497,71 @@ describe("manual account selection", () => {
 		expect(headers[0]).toBe("manual@example.com");
 		expect(headers[1]).toBe("auto@example.com");
 		expect(activateCount).toBe(1);
+	});
+
+	it("rotates when quota failure is thrown during initial stream", async () => {
+		const first = makeAccount("first@example.com");
+		const second = makeAccount("second@example.com");
+		let activateCount = 0;
+		const headers: string[] = [];
+		const exhausted: string[] = [];
+		const events: Array<{ type?: string }> = [];
+
+		const accountManager = {
+			waitUntilReady: async () => {},
+			syncImportedOpenAICodexAuth: async () => false,
+			getAvailableManualAccount: () => undefined,
+			hasManualAccount: () => false,
+			clearManualAccount: () => {},
+			activateBestAccount: async (options?: {
+				excludeEmails?: Set<string>;
+			}) => {
+				activateCount += 1;
+				return options?.excludeEmails?.has(first.email) ? second : first;
+			},
+			ensureValidToken: async (account: Account) => `${account.email}-token`,
+			handleQuotaExceeded: async (account: Account) => {
+				exhausted.push(account.email);
+			},
+		} as unknown as AccountManager;
+
+		const baseProvider = {
+			streamSimple: (
+				model: { headers?: Record<string, string> },
+				_context: unknown,
+				_options?: unknown,
+			) => {
+				headers.push(model.headers?.["X-Multicodex-Account"] || "");
+				async function* inner() {
+					if (model.headers?.["X-Multicodex-Account"] === first.email) {
+						throw new Error("limits reached after 3 retries");
+					}
+					yield { type: "done" };
+				}
+				return inner() as unknown as AsyncIterable<unknown>;
+			},
+		};
+
+		const stream = createStreamWrapper(
+			accountManager,
+			baseProvider as unknown as BaseProvider,
+		)(
+			{
+				id: "test",
+				provider: "openai-codex",
+				api: "openai-codex-responses",
+			} as StreamModel,
+			{} as StreamContext,
+		);
+
+		for await (const event of stream) {
+			events.push(event as { type?: string });
+		}
+
+		expect(headers).toEqual(["first@example.com", "second@example.com"]);
+		expect(exhausted).toEqual(["first@example.com"]);
+		expect(activateCount).toBe(2);
+		expect(events.some((event) => event.type === "error")).toBe(false);
 	});
 
 	it("skips auth-broken accounts before streaming and retries a healthy one", async () => {
