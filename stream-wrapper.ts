@@ -105,9 +105,15 @@ export function createStreamWrapper(
 					let forwardedAny = false;
 					let retry = false;
 					const rotateAfterQuota = async () => {
-						await accountManager.handleQuotaExceeded(account, {
-							signal: options?.signal,
-						});
+						try {
+							await accountManager.handleQuotaExceeded(account, {
+								signal: options?.signal,
+							});
+						} catch (error) {
+							if (!isQuotaErrorMessage(normalizeUnknownError(error))) {
+								throw error;
+							}
+						}
 						if (usingManual) {
 							accountManager.clearManualAccount();
 						}

@@ -564,6 +564,73 @@ describe("manual account selection", () => {
 		expect(events.some((event) => event.type === "error")).toBe(false);
 	});
 
+	it("rotates when quota metadata refresh also hits quota", async () => {
+		const first = makeAccount("first@example.com");
+		const second = makeAccount("second@example.com");
+		let activateCount = 0;
+		const headers: string[] = [];
+		const events: Array<{ type?: string }> = [];
+
+		const accountManager = {
+			waitUntilReady: async () => {},
+			syncImportedOpenAICodexAuth: async () => false,
+			getAvailableManualAccount: () => undefined,
+			hasManualAccount: () => false,
+			clearManualAccount: () => {},
+			activateBestAccount: async (options?: {
+				excludeEmails?: Set<string>;
+			}) => {
+				activateCount += 1;
+				return options?.excludeEmails?.has(first.email) ? second : first;
+			},
+			ensureValidToken: async (account: Account) => `${account.email}-token`,
+			handleQuotaExceeded: async () => {
+				throw new Error(
+					'Codex error: {"error":{"type":"usage_limit_reached","message":"The usage limit has been reached"},"status_code":429}',
+				);
+			},
+		} as unknown as AccountManager;
+
+		const baseProvider = {
+			streamSimple: (
+				model: { headers?: Record<string, string> },
+				_context: unknown,
+				_options?: unknown,
+			) => {
+				headers.push(model.headers?.["X-Multicodex-Account"] || "");
+				async function* inner() {
+					if (model.headers?.["X-Multicodex-Account"] === first.email) {
+						throw new Error(
+							'Codex error: {"error":{"type":"usage_limit_reached","message":"The usage limit has been reached"},"status_code":429}',
+						);
+					}
+					yield { type: "done" };
+				}
+				return inner() as unknown as AsyncIterable<unknown>;
+			},
+		};
+
+		const stream = createStreamWrapper(
+			accountManager,
+			baseProvider as unknown as BaseProvider,
+		)(
+			{
+				id: "test",
+				provider: "openai-codex",
+				api: "openai-codex-responses",
+			} as StreamModel,
+			{} as StreamContext,
+		);
+
+		for await (const event of stream) {
+			events.push(event as { type?: string });
+		}
+
+		expect(headers).toEqual(["first@example.com", "second@example.com"]);
+		expect(activateCount).toBe(2);
+		expect(events.some((event) => event.type === "error")).toBe(false);
+	});
+
 	it("skips auth-broken accounts before streaming and retries a healthy one", async () => {
 		const broken = makeAccount("broken@example.com");
 		const healthy = makeAccount("healthy@example.com");
