@@ -102,8 +102,16 @@ export function createStreamWrapper(
 						},
 					);
 
-					let forwardedAny = false;
+					let forwardedNonStartEvent = false;
+					let bufferedStartEvent: AssistantMessageEvent | undefined;
 					let retry = false;
+					const flushBufferedStart = () => {
+						if (!bufferedStartEvent) return;
+						stream.push(
+							rewriteProviderOnEvent(bufferedStartEvent, model.provider),
+						);
+						bufferedStartEvent = undefined;
+					};
 					const rotateAfterQuota = async () => {
 						try {
 							await accountManager.handleQuotaExceeded(account, {
@@ -124,25 +132,34 @@ export function createStreamWrapper(
 
 					try {
 						for await (const event of inner) {
+							if (event.type === "start" && !forwardedNonStartEvent) {
+								bufferedStartEvent = event;
+								continue;
+							}
+
 							if (event.type === "error") {
 								const msg = event.error.errorMessage || "";
 								const isQuota = isQuotaErrorMessage(msg);
 
 								if (
 									isQuota &&
-									!forwardedAny &&
+									!forwardedNonStartEvent &&
 									attempt < MAX_ROTATION_RETRIES
 								) {
 									await rotateAfterQuota();
 									break;
 								}
 
+								flushBufferedStart();
 								stream.push(rewriteProviderOnEvent(event, model.provider));
 								stream.end();
 								return;
 							}
 
-							forwardedAny = true;
+							flushBufferedStart();
+							if (event.type !== "start") {
+								forwardedNonStartEvent = true;
+							}
 							stream.push(rewriteProviderOnEvent(event, model.provider));
 
 							if (event.type === "done") {
@@ -153,9 +170,14 @@ export function createStreamWrapper(
 					} catch (error) {
 						const isQuota = isQuotaErrorMessage(normalizeUnknownError(error));
 
-						if (isQuota && !forwardedAny && attempt < MAX_ROTATION_RETRIES) {
+						if (
+							isQuota &&
+							!forwardedNonStartEvent &&
+							attempt < MAX_ROTATION_RETRIES
+						) {
 							await rotateAfterQuota();
 						} else {
+							flushBufferedStart();
 							throw error;
 						}
 					}
