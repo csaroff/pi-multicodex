@@ -7,7 +7,6 @@ import {
 	type Model,
 	type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { closeOpenAICodexWebSocketSessions } from "@earendil-works/pi-ai/openai-codex-responses";
 import {
 	createErrorAssistantMessage,
 	createLinkedAbortController,
@@ -18,6 +17,46 @@ import type { AccountManager } from "./account-manager";
 import { isQuotaErrorMessage } from "./quota";
 
 const MAX_ROTATION_RETRIES = 5;
+const OPENAI_CODEX_RESPONSES_MODULE =
+	"@earendil-works/pi-ai/openai-codex-responses";
+
+type CloseCodexWebSocketSessions = (sessionId?: string) => void | Promise<void>;
+
+const importModule = new Function("specifier", "return import(specifier)") as (
+	specifier: string,
+) => Promise<unknown>;
+
+let closeCodexWebSocketSessionsForTest: CloseCodexWebSocketSessions | undefined;
+let warnedWebSocketCleanupFailure = false;
+
+export function setCloseCodexWebSocketSessionsForTest(
+	handler: CloseCodexWebSocketSessions | undefined,
+): void {
+	closeCodexWebSocketSessionsForTest = handler;
+}
+
+async function closeCachedCodexWebSocketSession(
+	sessionId: string | undefined,
+): Promise<void> {
+	if (!sessionId) return;
+	if (closeCodexWebSocketSessionsForTest) {
+		await closeCodexWebSocketSessionsForTest(sessionId);
+		return;
+	}
+
+	try {
+		const mod = (await importModule(OPENAI_CODEX_RESPONSES_MODULE)) as {
+			closeOpenAICodexWebSocketSessions?: CloseCodexWebSocketSessions;
+		};
+		await mod.closeOpenAICodexWebSocketSessions?.(sessionId);
+	} catch (error) {
+		if (warnedWebSocketCleanupFailure) return;
+		warnedWebSocketCleanupFailure = true;
+		console.warn(
+			`Multicodex: failed to close cached Codex WebSocket session: ${normalizeUnknownError(error)}`,
+		);
+	}
+}
 
 type ApiProviderRef = {
 	streamSimple: (
@@ -127,9 +166,7 @@ export function createStreamWrapper(
 							accountManager.clearManualAccount();
 						}
 						excludedEmails.add(account.email);
-						if (options?.sessionId) {
-							closeOpenAICodexWebSocketSessions(options.sessionId);
-						}
+						await closeCachedCodexWebSocketSession(options?.sessionId);
 						abortController.abort();
 						retry = true;
 					};

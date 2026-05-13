@@ -1,6 +1,5 @@
 import { getModels } from "@earendil-works/pi-ai";
-import { closeOpenAICodexWebSocketSessions } from "@earendil-works/pi-ai/openai-codex-responses";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	type Account,
 	type AccountManager,
@@ -14,10 +13,11 @@ import {
 	parseCodexUsageResponse,
 	pickBestAccount,
 } from "./index";
+import { setCloseCodexWebSocketSessionsForTest } from "./stream-wrapper";
 
-vi.mock("@earendil-works/pi-ai/openai-codex-responses", () => ({
-	closeOpenAICodexWebSocketSessions: vi.fn(),
-}));
+afterEach(() => {
+	setCloseCodexWebSocketSessionsForTest(undefined);
+});
 
 describe("isQuotaErrorMessage", () => {
 	it("matches 429", () => {
@@ -441,8 +441,8 @@ describe("manual account selection", () => {
 	});
 
 	it("clears manual on quota and retries with auto account", async () => {
-		const closeCachedWebSockets = vi.mocked(closeOpenAICodexWebSocketSessions);
-		closeCachedWebSockets.mockClear();
+		const closeCachedWebSockets = vi.fn();
+		setCloseCodexWebSocketSessionsForTest(closeCachedWebSockets);
 		const manual = makeAccount("manual@example.com");
 		const auto = makeAccount("auto@example.com");
 		let cleared = false;
@@ -511,8 +511,8 @@ describe("manual account selection", () => {
 	});
 
 	it("rotates when quota failure is thrown during initial stream", async () => {
-		const closeCachedWebSockets = vi.mocked(closeOpenAICodexWebSocketSessions);
-		closeCachedWebSockets.mockClear();
+		const closeCachedWebSockets = vi.fn();
+		setCloseCodexWebSocketSessionsForTest(closeCachedWebSockets);
 		const first = makeAccount("first@example.com");
 		const second = makeAccount("second@example.com");
 		let activateCount = 0;
@@ -648,8 +648,8 @@ describe("manual account selection", () => {
 	});
 
 	it("rotates when a synthetic start precedes a quota error", async () => {
-		const closeCachedWebSockets = vi.mocked(closeOpenAICodexWebSocketSessions);
-		closeCachedWebSockets.mockClear();
+		const closeCachedWebSockets = vi.fn();
+		setCloseCodexWebSocketSessionsForTest(closeCachedWebSockets);
 		const first = makeAccount("first@example.com");
 		const second = makeAccount("second@example.com");
 		let activateCount = 0;
