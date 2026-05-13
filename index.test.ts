@@ -1,4 +1,5 @@
 import { getModels } from "@earendil-works/pi-ai";
+import { closeOpenAICodexWebSocketSessions } from "@earendil-works/pi-ai/openai-codex-responses";
 import { describe, expect, it, vi } from "vitest";
 import {
 	type Account,
@@ -13,6 +14,10 @@ import {
 	parseCodexUsageResponse,
 	pickBestAccount,
 } from "./index";
+
+vi.mock("@earendil-works/pi-ai/openai-codex-responses", () => ({
+	closeOpenAICodexWebSocketSessions: vi.fn(),
+}));
 
 describe("isQuotaErrorMessage", () => {
 	it("matches 429", () => {
@@ -110,6 +115,7 @@ function makeAccount(email: string, overrides?: Partial<Account>): Account {
 type StreamWrapper = ReturnType<typeof createStreamWrapper>;
 type StreamModel = Parameters<StreamWrapper>[0];
 type StreamContext = Parameters<StreamWrapper>[1];
+type StreamOptions = Parameters<StreamWrapper>[2];
 type BaseProvider = Parameters<typeof createStreamWrapper>[1];
 
 describe("usage helpers", () => {
@@ -435,6 +441,8 @@ describe("manual account selection", () => {
 	});
 
 	it("clears manual on quota and retries with auto account", async () => {
+		const closeCachedWebSockets = vi.mocked(closeOpenAICodexWebSocketSessions);
+		closeCachedWebSockets.mockClear();
 		const manual = makeAccount("manual@example.com");
 		const auto = makeAccount("auto@example.com");
 		let cleared = false;
@@ -487,6 +495,7 @@ describe("manual account selection", () => {
 				api: "openai-codex-responses",
 			} as StreamModel,
 			{} as StreamContext,
+			{ sessionId: "quota-session" } as StreamOptions,
 		);
 
 		for await (const _event of stream) {
@@ -497,9 +506,13 @@ describe("manual account selection", () => {
 		expect(headers[0]).toBe("manual@example.com");
 		expect(headers[1]).toBe("auto@example.com");
 		expect(activateCount).toBe(1);
+		expect(closeCachedWebSockets).toHaveBeenCalledWith("quota-session");
+		expect(closeCachedWebSockets).toHaveBeenCalledTimes(1);
 	});
 
 	it("rotates when quota failure is thrown during initial stream", async () => {
+		const closeCachedWebSockets = vi.mocked(closeOpenAICodexWebSocketSessions);
+		closeCachedWebSockets.mockClear();
 		const first = makeAccount("first@example.com");
 		const second = makeAccount("second@example.com");
 		let activateCount = 0;
@@ -552,6 +565,7 @@ describe("manual account selection", () => {
 				api: "openai-codex-responses",
 			} as StreamModel,
 			{} as StreamContext,
+			{ sessionId: "thrown-quota-session" } as StreamOptions,
 		);
 
 		for await (const event of stream) {
@@ -562,6 +576,8 @@ describe("manual account selection", () => {
 		expect(exhausted).toEqual(["first@example.com"]);
 		expect(activateCount).toBe(2);
 		expect(events.some((event) => event.type === "error")).toBe(false);
+		expect(closeCachedWebSockets).toHaveBeenCalledWith("thrown-quota-session");
+		expect(closeCachedWebSockets).toHaveBeenCalledTimes(1);
 	});
 
 	it("rotates when quota metadata refresh also hits quota", async () => {
@@ -632,6 +648,8 @@ describe("manual account selection", () => {
 	});
 
 	it("rotates when a synthetic start precedes a quota error", async () => {
+		const closeCachedWebSockets = vi.mocked(closeOpenAICodexWebSocketSessions);
+		closeCachedWebSockets.mockClear();
 		const first = makeAccount("first@example.com");
 		const second = makeAccount("second@example.com");
 		let activateCount = 0;
@@ -690,6 +708,7 @@ describe("manual account selection", () => {
 				api: "openai-codex-responses",
 			} as StreamModel,
 			{} as StreamContext,
+			{ sessionId: "buffered-start-quota-session" } as StreamOptions,
 		);
 
 		for await (const event of stream) {
@@ -701,6 +720,10 @@ describe("manual account selection", () => {
 		expect(activateCount).toBe(2);
 		expect(events.some((event) => event.type === "error")).toBe(false);
 		expect(events.map((event) => event.type)).toEqual(["start", "done"]);
+		expect(closeCachedWebSockets).toHaveBeenCalledWith(
+			"buffered-start-quota-session",
+		);
+		expect(closeCachedWebSockets).toHaveBeenCalledTimes(1);
 	});
 
 	it("skips auth-broken accounts before streaming and retries a healthy one", async () => {

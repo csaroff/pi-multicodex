@@ -7,6 +7,7 @@ import {
 	type Model,
 	type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
+import { closeOpenAICodexWebSocketSessions } from "@earendil-works/pi-ai/openai-codex-responses";
 import {
 	createErrorAssistantMessage,
 	createLinkedAbortController,
@@ -126,6 +127,9 @@ export function createStreamWrapper(
 							accountManager.clearManualAccount();
 						}
 						excludedEmails.add(account.email);
+						if (options?.sessionId) {
+							closeOpenAICodexWebSocketSessions(options.sessionId);
+						}
 						abortController.abort();
 						retry = true;
 					};
