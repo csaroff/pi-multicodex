@@ -448,6 +448,7 @@ describe("manual account selection", () => {
 		let cleared = false;
 		let activateCount = 0;
 		const headers: string[] = [];
+		const runtimeAccounts: string[] = [];
 		let streamCalls = 0;
 
 		const accountManager = {
@@ -463,6 +464,9 @@ describe("manual account selection", () => {
 				return auto;
 			},
 			ensureValidToken: async (account: Account) => `${account.email}-token`,
+			setRuntimeActiveAccount: (email: string) => {
+				runtimeAccounts.push(email);
+			},
 			handleQuotaExceeded: async () => {},
 		} as unknown as AccountManager;
 
@@ -505,6 +509,7 @@ describe("manual account selection", () => {
 		expect(cleared).toBe(true);
 		expect(headers[0]).toBe("manual@example.com");
 		expect(headers[1]).toBe("auto@example.com");
+		expect(runtimeAccounts).toEqual(["manual@example.com", "auto@example.com"]);
 		expect(activateCount).toBe(1);
 		expect(closeCachedWebSockets).toHaveBeenCalledWith("quota-session");
 		expect(closeCachedWebSockets).toHaveBeenCalledTimes(1);

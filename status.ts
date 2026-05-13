@@ -206,6 +206,12 @@ function shouldShowReset(
 	);
 }
 
+function getFooterAccount(accountManager: AccountManager) {
+	return (
+		accountManager.getDisplayAccount?.() ?? accountManager.getActiveAccount()
+	);
+}
+
 function formatUsageSegment(
 	ctx: ExtensionContext,
 	label: string,
@@ -409,7 +415,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 		if (!withLiveContext(ctx, () => ctx.hasUI, false)) return undefined;
 		if (!isManagedModel(ctx.model)) return undefined;
 
-		const activeAccount = accountManager.getActiveAccount();
+		const activeAccount = getFooterAccount(accountManager);
 		if (!activeAccount) {
 			return withLiveContext(
 				ctx,
@@ -456,7 +462,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 
 		renderCachedStatus(ctx, livePreviewPreferences ?? preferences);
 
-		const activeAccount = accountManager.getActiveAccount();
+		const activeAccount = getFooterAccount(accountManager);
 		if (!activeAccount) {
 			withLiveContext(
 				ctx,
@@ -474,6 +480,12 @@ export function createUsageStatusController(accountManager: AccountManager) {
 		const usage =
 			(await accountManager.refreshUsageForAccount(activeAccount)) ??
 			cachedUsage;
+		const currentAccount = getFooterAccount(accountManager);
+		if (currentAccount?.email !== activeAccount.email) {
+			renderCachedStatus(ctx, livePreviewPreferences ?? preferences);
+			queuedRefresh = true;
+			return;
+		}
 		withLiveContext(
 			ctx,
 			() =>

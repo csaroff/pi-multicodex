@@ -33,6 +33,7 @@ export class AccountManager {
 	private refreshPromises = new Map<string, Promise<string>>();
 	private warningHandler?: WarningHandler;
 	private manualEmail?: string;
+	private runtimeActiveEmail?: string;
 	private stateChangeHandlers = new Set<StateChangeHandler>();
 	private warnedAuthFailureEmails = new Set<string>();
 	private readyPromise: Promise<void> = Promise.resolve();
@@ -128,6 +129,9 @@ export class AccountManager {
 			if (this.manualEmail === removedEmail) {
 				this.manualEmail = undefined;
 			}
+			if (this.runtimeActiveEmail === removedEmail) {
+				this.runtimeActiveEmail = undefined;
+			}
 			if (this.data.activeEmail === removedEmail) {
 				this.data.activeEmail = this.data.accounts[0]?.email;
 			}
@@ -196,6 +200,20 @@ export class AccountManager {
 		return this.data.accounts[0];
 	}
 
+	getDisplayAccount(): Account | undefined {
+		const runtimeAccount = this.runtimeActiveEmail
+			? this.getAccount(this.runtimeActiveEmail)
+			: undefined;
+		return runtimeAccount ?? this.getActiveAccount();
+	}
+
+	setRuntimeActiveAccount(email: string): void {
+		if (!this.getAccount(email)) return;
+		if (this.runtimeActiveEmail === email) return;
+		this.runtimeActiveEmail = email;
+		this.notifyStateChanged();
+	}
+
 	getManualAccount(): Account | undefined {
 		if (!this.manualEmail) return undefined;
 		const account = this.getAccount(this.manualEmail);
@@ -211,6 +229,7 @@ export class AccountManager {
 	}
 
 	setActiveAccount(email: string): void {
+		this.runtimeActiveEmail = undefined;
 		this.data.activeEmail = email;
 		this.save();
 		this.notifyStateChanged();
@@ -219,6 +238,7 @@ export class AccountManager {
 	setManualAccount(email: string): void {
 		const account = this.getAccount(email);
 		if (!account) return;
+		this.runtimeActiveEmail = undefined;
 		this.manualEmail = email;
 		account.lastUsed = Date.now();
 		this.notifyStateChanged();
@@ -226,6 +246,7 @@ export class AccountManager {
 
 	clearManualAccount(): void {
 		if (!this.manualEmail) return;
+		this.runtimeActiveEmail = undefined;
 		this.manualEmail = undefined;
 		this.notifyStateChanged();
 	}

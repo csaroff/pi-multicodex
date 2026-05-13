@@ -256,6 +256,47 @@ describe("AccountManager account deduplication", () => {
 	});
 });
 
+describe("AccountManager display account", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mocks.storageData.accounts = [
+			{
+				email: "pro@example.com",
+				accessToken: "pro-access",
+				refreshToken: "pro-refresh",
+				expiresAt: Date.now() + 3600_000,
+			},
+			{
+				email: "business@example.com",
+				accessToken: "business-access",
+				refreshToken: "business-refresh",
+				expiresAt: Date.now() + 3600_000,
+			},
+		];
+		mocks.storageData.activeEmail = "pro@example.com";
+		mocks.loadImportedOpenAICodexAuth.mockResolvedValue(undefined);
+	});
+
+	it("prefers the account most recently selected by the stream wrapper", () => {
+		const manager = new AccountManager();
+
+		expect(manager.getDisplayAccount()?.email).toBe("pro@example.com");
+
+		manager.setRuntimeActiveAccount("business@example.com");
+
+		expect(manager.getDisplayAccount()?.email).toBe("business@example.com");
+	});
+
+	it("clears runtime display account on explicit account selection", () => {
+		const manager = new AccountManager();
+		manager.setRuntimeActiveAccount("business@example.com");
+
+		manager.setManualAccount("pro@example.com");
+
+		expect(manager.getDisplayAccount()?.email).toBe("pro@example.com");
+	});
+});
+
 describe("AccountManager auth-failure warnings", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();

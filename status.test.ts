@@ -232,6 +232,32 @@ describe("createUsageStatusController", () => {
 		);
 	});
 
+	it("renders runtime display account instead of persisted active account", async () => {
+		const setStatus = vi.fn();
+		const controller = createUsageStatusController({
+			onStateChange: () => () => undefined,
+			getActiveAccount: () => ({ email: "stored@example.com" }),
+			getDisplayAccount: () => ({ email: "runtime@example.com" }),
+			getCachedUsage: vi.fn(),
+			refreshUsageForAccount: vi.fn().mockResolvedValue({
+				primary: { usedPercent: 10, resetAt: 1 },
+				secondary: { usedPercent: 20, resetAt: 2 },
+				fetchedAt: 0,
+			}),
+		} as never);
+
+		await controller.refreshFor(createContext({ setStatus }));
+
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-usage",
+			expect.stringContaining("runtime@example.com"),
+		);
+		expect(setStatus).not.toHaveBeenCalledWith(
+			"multicodex-usage",
+			expect.stringContaining("stored@example.com"),
+		);
+	});
+
 	it("falls back to cached usage when refreshing fails", async () => {
 		const setStatus = vi.fn();
 		const controller = createUsageStatusController({
@@ -352,6 +378,66 @@ describe("createUsageStatusController", () => {
 		activeEmail = "b@example.com";
 		stateChangeHandler?.();
 
+		expect(setStatus).toHaveBeenLastCalledWith(
+			"multicodex-usage",
+			expect.stringContaining("b@example.com"),
+		);
+		expect(setStatus).toHaveBeenLastCalledWith(
+			"multicodex-usage",
+			expect.stringContaining("5h:95% left"),
+		);
+	});
+
+	it("does not overwrite a runtime account switch after an older usage refresh finishes", async () => {
+		const setStatus = vi.fn();
+		let stateChangeHandler: (() => void) | undefined;
+		let displayEmail = "a@example.com";
+		const usages = new Map([
+			[
+				"a@example.com",
+				{
+					primary: { usedPercent: 30, resetAt: 1 },
+					secondary: { usedPercent: 40, resetAt: 2 },
+					fetchedAt: 0,
+				},
+			],
+			[
+				"b@example.com",
+				{
+					primary: { usedPercent: 5, resetAt: 1 },
+					secondary: { usedPercent: 10, resetAt: 2 },
+					fetchedAt: 0,
+				},
+			],
+		]);
+		const refreshUsageForAccount = vi
+			.fn()
+			.mockImplementation(async (account) => {
+				if (account.email === "a@example.com") {
+					displayEmail = "b@example.com";
+					stateChangeHandler?.();
+				}
+				return usages.get(account.email);
+			});
+		const controller = createUsageStatusController({
+			onStateChange: (handler: () => void) => {
+				stateChangeHandler = handler;
+				return () => undefined;
+			},
+			getActiveAccount: () => ({ email: displayEmail }),
+			getDisplayAccount: () => ({ email: displayEmail }),
+			getCachedUsage: (email: string) => usages.get(email),
+			refreshUsageForAccount,
+		} as never);
+
+		await controller.refreshFor(createContext({ setStatus }));
+
+		expect(refreshUsageForAccount).toHaveBeenCalledWith({
+			email: "a@example.com",
+		});
+		expect(refreshUsageForAccount).toHaveBeenCalledWith({
+			email: "b@example.com",
+		});
 		expect(setStatus).toHaveBeenLastCalledWith(
 			"multicodex-usage",
 			expect.stringContaining("b@example.com"),

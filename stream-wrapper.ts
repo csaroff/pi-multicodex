@@ -118,6 +118,7 @@ export function createStreamWrapper(
 						}
 						throw error;
 					}
+					accountManager.setRuntimeActiveAccount?.(account.email);
 					const abortController = createLinkedAbortController(options?.signal);
 
 					const internalModel: Model<"openai-codex-responses"> = {
