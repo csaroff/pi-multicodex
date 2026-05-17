@@ -33,6 +33,7 @@ const BRAND_LABEL = "Codex";
 const SEGMENT_SEPARATOR = "·";
 const FIVE_HOUR_LABEL = "5h:";
 const SEVEN_DAY_LABEL = "7d:";
+const USAGE_BAR_SEGMENTS = 20;
 
 function isStaleContextError(error: unknown): boolean {
 	return (
@@ -187,6 +188,26 @@ function formatPercent(
 	return `${Math.round(clampPercent(displayPercent))}% ${mode}`;
 }
 
+function formatUsageBar(
+	displayPercent: number | undefined,
+): string | undefined {
+	if (typeof displayPercent !== "number" || Number.isNaN(displayPercent)) {
+		return undefined;
+	}
+
+	const filled = Math.round(
+		(clampPercent(displayPercent) / 100) * USAGE_BAR_SEGMENTS,
+	);
+	return `[${"█".repeat(filled)}${"░".repeat(USAGE_BAR_SEGMENTS - filled)}]`;
+}
+
+function formatAccountText(
+	ctx: ExtensionContext,
+	accountEmail: string,
+): string {
+	return ctx.ui.theme.bold(ctx.ui.theme.fg("text", accountEmail));
+}
+
 function formatResetCountdown(resetAt: number | undefined): string | undefined {
 	if (typeof resetAt !== "number" || Number.isNaN(resetAt)) return undefined;
 	const totalSeconds = Math.max(0, Math.round((resetAt - Date.now()) / 1000));
@@ -244,13 +265,15 @@ function formatUsageSegment(
 	resetAt: number | undefined,
 	showReset: boolean,
 	preferences: FooterPreferences,
+	showBar = false,
 ): string {
 	const displayPercent = usedToDisplayPercent(
 		usedPercent,
 		preferences.usageMode,
 	);
+	const bar = showBar ? formatUsageBar(displayPercent) : undefined;
 	const parts = [
-		`${label}${formatPercent(displayPercent, preferences.usageMode)}`,
+		`${label}${bar ? `${bar} ` : ""}${formatPercent(displayPercent, preferences.usageMode)}`,
 	];
 	if (showReset) {
 		const countdown = formatResetCountdown(resetAt);
@@ -275,7 +298,7 @@ export function formatActiveAccountStatus(
 	preferences: FooterPreferences,
 ): string {
 	const accountText = preferences.showAccount
-		? ctx.ui.theme.fg("text", accountEmail)
+		? formatAccountText(ctx, accountEmail)
 		: undefined;
 	if (!usage) {
 		return [formatBrand(ctx), accountText, formatLoading(ctx)]
@@ -320,7 +343,7 @@ function formatAccountStatusWidget(
 	usage: CodexUsageSnapshot | undefined,
 	preferences: FooterPreferences,
 ): string {
-	const accountText = ctx.ui.theme.fg("text", accountEmail);
+	const accountText = formatAccountText(ctx, accountEmail);
 	if (!usage) {
 		return [accountText, formatLoading(ctx)].filter(Boolean).join(" ");
 	}
@@ -332,6 +355,7 @@ function formatAccountStatusWidget(
 		usage.primary?.resetAt,
 		shouldShowReset(preferences, "5h"),
 		preferences,
+		true,
 	);
 	const sevenDay = formatUsageSegment(
 		ctx,
@@ -340,6 +364,7 @@ function formatAccountStatusWidget(
 		usage.secondary?.resetAt,
 		shouldShowReset(preferences, "7d"),
 		preferences,
+		true,
 	);
 
 	return [accountText, fiveHour, sevenDay]

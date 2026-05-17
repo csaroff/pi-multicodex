@@ -25,11 +25,13 @@ function createContext(overrides?: {
 	setStatus?: ReturnType<typeof vi.fn>;
 	notify?: ReturnType<typeof vi.fn>;
 	color?: (token: string, text: string) => string;
+	bold?: (text: string) => string;
 	stale?: "ctx" | "instance" | boolean;
 }) {
 	const setStatus = overrides?.setStatus ?? vi.fn();
 	const notify = overrides?.notify ?? vi.fn();
 	const color = overrides?.color ?? ((_token: string, text: string) => text);
+	const bold = overrides?.bold ?? ((text: string) => text);
 	if (overrides?.stale) {
 		const staleKind = overrides.stale === "instance" ? "instance" : "ctx";
 		return {
@@ -46,7 +48,7 @@ function createContext(overrides?: {
 				notify,
 				theme: {
 					fg: color,
-					bold: (text: string) => text,
+					bold,
 				},
 			},
 		} as never;
@@ -61,7 +63,7 @@ function createContext(overrides?: {
 			notify,
 			theme: {
 				fg: color,
-				bold: (text: string) => text,
+				bold,
 			},
 		},
 	} as never;
@@ -125,6 +127,7 @@ describe("formatActiveAccountStatus", () => {
 	it("colors full usage windows by severity, adds muted separators, and lifts the account text", () => {
 		const ctx = createContext({
 			color: (token: string, text: string) => `[${token}:${text}]`,
+			bold: (text: string) => `<b>${text}</b>`,
 		});
 		const text = formatActiveAccountStatus(
 			ctx,
@@ -138,7 +141,7 @@ describe("formatActiveAccountStatus", () => {
 		);
 
 		expect(text).toContain("[muted:Codex]");
-		expect(text).toContain("[text:a@example.com]");
+		expect(text).toContain("<b>[text:a@example.com]</b>");
 		expect(text).toContain("[success:5h:75% left (↺");
 		expect(text).toContain("[error:7d:5% left (↺");
 		expect(text).toContain("[muted:·]");
@@ -517,6 +520,30 @@ describe("createUsageStatusController", () => {
 		);
 	});
 
+	it("renders per-account usage widgets with progress bars", async () => {
+		const setStatus = vi.fn();
+		const accounts = [{ email: "a@example.com" }];
+		const controller = createUsageStatusController({
+			onStateChange: () => () => undefined,
+			getAccounts: () => accounts,
+			isPiAuthAccount: () => false,
+			getActiveAccount: () => accounts[0],
+			getCachedUsage: () => usage(25, 60),
+			refreshUsageForAccount: vi.fn().mockResolvedValue(undefined),
+		} as never);
+
+		await controller.refreshFor(createContext({ setStatus }));
+
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-0",
+			expect.stringContaining("5h:[███████████████░░░░░] 75% left"),
+		);
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-0",
+			expect.stringContaining("7d:[████████░░░░░░░░░░░░] 40% left"),
+		);
+	});
+
 	it("filters pi auth accounts, renders at most two managed accounts, and orders display account first", async () => {
 		const setStatus = vi.fn();
 		const piAuth = { email: "pi@example.com" };
@@ -638,11 +665,11 @@ describe("createUsageStatusController", () => {
 
 		expect(setStatus).toHaveBeenCalledWith(
 			"multicodex-account-usage-0",
-			expect.stringContaining("5h:95% left"),
+			expect.stringContaining("95% left"),
 		);
 		expect(setStatus).toHaveBeenCalledWith(
 			"multicodex-account-usage-1",
-			expect.stringContaining("5h:70% left"),
+			expect.stringContaining("70% left"),
 		);
 	});
 
