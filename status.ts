@@ -33,7 +33,7 @@ const BRAND_LABEL = "Codex";
 const SEGMENT_SEPARATOR = "·";
 const FIVE_HOUR_LABEL = "5h:";
 const SEVEN_DAY_LABEL = "7d:";
-const USAGE_BAR_SEGMENTS = 20;
+const USAGE_BAR_SEGMENTS = 12;
 
 function isStaleContextError(error: unknown): boolean {
 	return (
@@ -204,8 +204,11 @@ function formatUsageBar(
 function formatAccountText(
 	ctx: ExtensionContext,
 	accountEmail: string,
+	isActive = false,
 ): string {
-	return ctx.ui.theme.bold(ctx.ui.theme.fg("text", accountEmail));
+	const label = isActive ? `▶ ${accountEmail}` : accountEmail;
+	const token = isActive ? "accent" : "text";
+	return ctx.ui.theme.bold(ctx.ui.theme.fg(token, label));
 }
 
 function formatResetCountdown(resetAt: number | undefined): string | undefined {
@@ -342,10 +345,12 @@ function formatAccountStatusWidget(
 	accountEmail: string,
 	usage: CodexUsageSnapshot | undefined,
 	preferences: FooterPreferences,
+	isActive = false,
 ): string {
-	const accountText = formatAccountText(ctx, accountEmail);
+	const accountText = formatAccountText(ctx, accountEmail, isActive);
 	if (!usage) {
-		return [accountText, formatLoading(ctx)].filter(Boolean).join(" ");
+		const text = [accountText, formatLoading(ctx)].filter(Boolean).join(" ");
+		return isActive ? ctx.ui.theme.bold(text) : text;
 	}
 
 	const fiveHour = formatUsageSegment(
@@ -367,9 +372,10 @@ function formatAccountStatusWidget(
 		true,
 	);
 
-	return [accountText, fiveHour, sevenDay]
+	const text = [accountText, fiveHour, sevenDay]
 		.filter(Boolean)
 		.join(` ${formatSeparator(ctx)} `);
+	return isActive ? ctx.ui.theme.bold(text) : text;
 }
 
 function getBooleanLabel(value: boolean): string {
@@ -563,6 +569,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 		withLiveContext(
 			ctx,
 			() => {
+				const activeAccount = getFooterAccount(accountManager);
 				for (const [index, key] of ACCOUNT_STATUS_KEYS.entries()) {
 					const account = accounts?.[index];
 					ctx.ui.setStatus(
@@ -573,6 +580,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 									account.email,
 									accountManager.getCachedUsage(account.email),
 									preferencesOverride,
+									account.email === activeAccount?.email,
 								)
 							: undefined,
 					);
@@ -647,6 +655,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 				if (!usage || generation !== accountStatusGeneration) return;
 				const currentAccounts = getManagedStatusAccounts(accountManager) ?? [];
 				if (currentAccounts[index]?.email !== account.email) return;
+				const activeAccount = getFooterAccount(accountManager);
 				withLiveContext(
 					ctx,
 					() =>
@@ -657,6 +666,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 								account.email,
 								usage,
 								livePreviewPreferences ?? preferences,
+								account.email === activeAccount?.email,
 							),
 						),
 					undefined,

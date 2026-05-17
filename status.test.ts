@@ -536,11 +536,45 @@ describe("createUsageStatusController", () => {
 
 		expect(setStatus).toHaveBeenCalledWith(
 			"multicodex-account-usage-0",
-			expect.stringContaining("5h:[███████████████░░░░░] 75% left"),
+			expect.stringContaining("▶ a@example.com · 5h:[█████████░░░] 75% left"),
 		);
 		expect(setStatus).toHaveBeenCalledWith(
 			"multicodex-account-usage-0",
-			expect.stringContaining("7d:[████████░░░░░░░░░░░░] 40% left"),
+			expect.stringContaining("7d:[█████░░░░░░░] 40% left"),
+		);
+	});
+
+	it("styles the active per-account usage widget more strongly", async () => {
+		const setStatus = vi.fn();
+		const accounts = [{ email: "a@example.com" }, { email: "b@example.com" }];
+		const controller = createUsageStatusController({
+			onStateChange: () => () => undefined,
+			getAccounts: () => accounts,
+			isPiAuthAccount: () => false,
+			getActiveAccount: () => accounts[0],
+			getCachedUsage: () => usage(25, 60),
+			refreshUsageForAccount: vi.fn().mockResolvedValue(undefined),
+		} as never);
+
+		await controller.refreshFor(
+			createContext({
+				setStatus,
+				color: (token: string, text: string) => `[${token}:${text}]`,
+				bold: (text: string) => `<b>${text}</b>`,
+			}),
+		);
+
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-0",
+			expect.stringContaining("<b><b>[accent:▶ a@example.com]</b>"),
+		);
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-1",
+			expect.stringContaining("<b>[text:b@example.com]</b>"),
+		);
+		expect(setStatus).not.toHaveBeenCalledWith(
+			"multicodex-account-usage-1",
+			expect.stringContaining("▶ b@example.com"),
 		);
 	});
 
