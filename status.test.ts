@@ -14,6 +14,12 @@ const defaultPreferences: FooterPreferences = {
 	order: "account-first",
 };
 
+const usage = (primary: number, secondary: number) => ({
+	primary: { usedPercent: primary, resetAt: Date.now() + 60_000 },
+	secondary: { usedPercent: secondary, resetAt: Date.now() + 120_000 },
+	fetchedAt: 0,
+});
+
 function createContext(overrides?: {
 	provider?: string;
 	setStatus?: ReturnType<typeof vi.fn>;
@@ -476,5 +482,204 @@ describe("createUsageStatusController", () => {
 			controller.refreshFor(createContext({ stale: "ctx", setStatus })),
 		).resolves.toBeUndefined();
 		expect(setStatus).not.toHaveBeenCalled();
+	});
+
+	it("renders per-account widgets on fixed IDs without changing the active-account ID", async () => {
+		const setStatus = vi.fn();
+		const accounts = [{ email: "a@example.com" }, { email: "b@example.com" }];
+		const controller = createUsageStatusController({
+			onStateChange: () => () => undefined,
+			getAccounts: () => accounts,
+			isPiAuthAccount: () => false,
+			getActiveAccount: () => accounts[0],
+			getCachedUsage: (email: string) =>
+				email === "a@example.com" ? usage(25, 60) : usage(88, 32),
+			refreshUsageForAccount: vi.fn().mockResolvedValue(undefined),
+		} as never);
+
+		await controller.refreshFor(createContext({ setStatus }));
+
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-usage",
+			expect.stringContaining("a@example.com"),
+		);
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-0",
+			expect.stringContaining("a@example.com"),
+		);
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-1",
+			expect.stringContaining("b@example.com"),
+		);
+		expect(setStatus).not.toHaveBeenCalledWith(
+			"multicodex-account-usage-a@example.com",
+			expect.anything(),
+		);
+	});
+
+	it("filters pi auth accounts, renders at most two managed accounts, and orders display account first", async () => {
+		const setStatus = vi.fn();
+		const piAuth = { email: "pi@example.com" };
+		const accounts = [
+			{ email: "a@example.com" },
+			{ email: "b@example.com" },
+			{ email: "c@example.com" },
+			piAuth,
+		];
+		const refreshUsageForAccount = vi.fn().mockResolvedValue(undefined);
+		const controller = createUsageStatusController({
+			onStateChange: () => () => undefined,
+			getAccounts: () => accounts,
+			isPiAuthAccount: (account: { email: string }) => account === piAuth,
+			getActiveAccount: () => accounts[0],
+			getDisplayAccount: () => accounts[1],
+			getCachedUsage: () => usage(10, 20),
+			refreshUsageForAccount,
+		} as never);
+
+		await controller.refreshFor(createContext({ setStatus }));
+
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-0",
+			expect.stringContaining("b@example.com"),
+		);
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-1",
+			expect.stringContaining("a@example.com"),
+		);
+		expect(refreshUsageForAccount).toHaveBeenCalledWith(accounts[1]);
+		expect(refreshUsageForAccount).toHaveBeenCalledWith(accounts[0]);
+		expect(refreshUsageForAccount).not.toHaveBeenCalledWith(accounts[2]);
+		expect(refreshUsageForAccount).not.toHaveBeenCalledWith(piAuth);
+	});
+
+	it("falls back to storage order when the active account is pi auth", async () => {
+		const setStatus = vi.fn();
+		const piAuth = { email: "pi@example.com" };
+		const accounts = [
+			{ email: "a@example.com" },
+			{ email: "b@example.com" },
+			piAuth,
+		];
+		const controller = createUsageStatusController({
+			onStateChange: () => () => undefined,
+			getAccounts: () => accounts,
+			isPiAuthAccount: (account: { email: string }) => account === piAuth,
+			getActiveAccount: () => piAuth,
+			getCachedUsage: () => usage(10, 20),
+			refreshUsageForAccount: vi.fn().mockResolvedValue(undefined),
+		} as never);
+
+		await controller.refreshFor(createContext({ setStatus }));
+
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-0",
+			expect.stringContaining("a@example.com"),
+		);
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-1",
+			expect.stringContaining("b@example.com"),
+		);
+	});
+
+	it("clears unused account slots and invalid contexts without touching the active-account cleanup", async () => {
+		const setStatus = vi.fn();
+		let accounts = [{ email: "a@example.com" }, { email: "b@example.com" }];
+		const controller = createUsageStatusController({
+			onStateChange: () => () => undefined,
+			getAccounts: () => accounts,
+			isPiAuthAccount: () => false,
+			getActiveAccount: () => accounts[0],
+			getCachedUsage: () => usage(10, 20),
+			refreshUsageForAccount: vi.fn().mockResolvedValue(undefined),
+		} as never);
+		const ctx = createContext({ setStatus });
+
+		await controller.refreshFor(ctx);
+		accounts = [{ email: "a@example.com" }];
+		await controller.refreshFor(ctx);
+		await controller.refreshFor(
+			createContext({ provider: "anthropic", setStatus }),
+		);
+		controller.stopAutoRefresh(ctx);
+
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-1",
+			undefined,
+		);
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-0",
+			undefined,
+		);
+		expect(setStatus).toHaveBeenCalledWith("multicodex-usage", undefined);
+	});
+
+	it("keeps cached per-account widgets when one refresh fails while another updates", async () => {
+		const setStatus = vi.fn();
+		const accounts = [{ email: "a@example.com" }, { email: "b@example.com" }];
+		const refreshUsageForAccount = vi
+			.fn()
+			.mockImplementation(async (account) => {
+				if (account.email === "a@example.com") throw new Error("boom");
+				return usage(5, 10);
+			});
+		const controller = createUsageStatusController({
+			onStateChange: () => () => undefined,
+			getAccounts: () => accounts,
+			isPiAuthAccount: () => false,
+			getActiveAccount: () => accounts[1],
+			getDisplayAccount: () => accounts[1],
+			getCachedUsage: (email: string) =>
+				email === "a@example.com" ? usage(30, 40) : usage(60, 70),
+			refreshUsageForAccount,
+		} as never);
+
+		await controller.refreshFor(createContext({ setStatus }));
+
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-0",
+			expect.stringContaining("5h:95% left"),
+		);
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-1",
+			expect.stringContaining("5h:70% left"),
+		);
+	});
+
+	it("does not let stale per-account refresh results overwrite a newer account selection", async () => {
+		const setStatus = vi.fn();
+		let accounts = [{ email: "a@example.com" }, { email: "b@example.com" }];
+		let stateChangeHandler: (() => void) | undefined;
+		const refreshUsageForAccount = vi
+			.fn()
+			.mockImplementation(async (account) => {
+				if (account.email === "a@example.com") {
+					accounts = [{ email: "b@example.com" }];
+					stateChangeHandler?.();
+				}
+				return account.email === "a@example.com" ? usage(1, 2) : usage(5, 10);
+			});
+		const controller = createUsageStatusController({
+			onStateChange: (handler: () => void) => {
+				stateChangeHandler = handler;
+				return () => undefined;
+			},
+			getAccounts: () => accounts,
+			isPiAuthAccount: () => false,
+			getActiveAccount: () => accounts[0],
+			getCachedUsage: () => usage(50, 60),
+			refreshUsageForAccount,
+		} as never);
+
+		await controller.refreshFor(createContext({ setStatus }));
+
+		expect(setStatus).toHaveBeenLastCalledWith(
+			"multicodex-account-usage-0",
+			expect.stringContaining("b@example.com"),
+		);
+		expect(setStatus).not.toHaveBeenCalledWith(
+			"multicodex-account-usage-0",
+			expect.stringContaining("a@example.com · 5h:99% left"),
+		);
 	});
 });

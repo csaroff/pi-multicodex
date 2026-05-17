@@ -20,6 +20,10 @@ import { PROVIDER_ID } from "./provider";
 import type { CodexUsageSnapshot } from "./usage";
 
 const STATUS_KEY = "multicodex-usage";
+const ACCOUNT_STATUS_KEYS = [
+	"multicodex-account-usage-0",
+	"multicodex-account-usage-1",
+] as const;
 const SETTINGS_KEY = "pi-multicodex";
 const SETTINGS_FILE = getAgentSettingsPath();
 const REFRESH_INTERVAL_MS = 60_000;
@@ -212,6 +216,27 @@ function getFooterAccount(accountManager: AccountManager) {
 	);
 }
 
+function getManagedStatusAccounts(accountManager: AccountManager) {
+	if (!accountManager.getAccounts) return undefined;
+	const accounts = (accountManager.getAccounts?.() ?? []).filter(
+		(account) => !accountManager.isPiAuthAccount?.(account),
+	);
+	const displayAccount = getFooterAccount(accountManager);
+	const displayManagedAccount = displayAccount
+		? accounts.find((account) => account.email === displayAccount.email)
+		: undefined;
+	const orderedAccounts = displayManagedAccount
+		? [
+				displayManagedAccount,
+				...accounts.filter(
+					(account) => account.email !== displayManagedAccount.email,
+				),
+			]
+		: accounts;
+
+	return orderedAccounts.slice(0, ACCOUNT_STATUS_KEYS.length);
+}
+
 function formatUsageSegment(
 	ctx: ExtensionContext,
 	label: string,
@@ -285,6 +310,39 @@ export function formatActiveAccountStatus(
 		preferences.order === "account-first" ? [] : [accountText].filter(Boolean);
 
 	return [...leading, ...trailing]
+		.filter(Boolean)
+		.join(` ${formatSeparator(ctx)} `);
+}
+
+function formatAccountStatusWidget(
+	ctx: ExtensionContext,
+	accountEmail: string,
+	usage: CodexUsageSnapshot | undefined,
+	preferences: FooterPreferences,
+): string {
+	const accountText = ctx.ui.theme.fg("text", accountEmail);
+	if (!usage) {
+		return [accountText, formatLoading(ctx)].filter(Boolean).join(" ");
+	}
+
+	const fiveHour = formatUsageSegment(
+		ctx,
+		FIVE_HOUR_LABEL,
+		usage.primary?.usedPercent,
+		usage.primary?.resetAt,
+		shouldShowReset(preferences, "5h"),
+		preferences,
+	);
+	const sevenDay = formatUsageSegment(
+		ctx,
+		SEVEN_DAY_LABEL,
+		usage.secondary?.usedPercent,
+		usage.secondary?.resetAt,
+		shouldShowReset(preferences, "7d"),
+		preferences,
+	);
+
+	return [accountText, fiveHour, sevenDay]
 		.filter(Boolean)
 		.join(` ${formatSeparator(ctx)} `);
 }
@@ -365,6 +423,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 	let activeContext: ExtensionContext | undefined;
 	let refreshInFlight = false;
 	let queuedRefresh = false;
+	let accountStatusGeneration = 0;
 	let preferences: FooterPreferences = DEFAULT_PREFERENCES;
 	let livePreviewPreferences: FooterPreferences | undefined;
 
@@ -400,6 +459,20 @@ export function createUsageStatusController(accountManager: AccountManager) {
 		withLiveContext(
 			ctx,
 			() => ctx.ui.setStatus(STATUS_KEY, undefined),
+			undefined,
+		);
+	}
+
+	function clearAccountStatuses(ctx?: ExtensionContext): void {
+		accountStatusGeneration++;
+		if (!ctx) return;
+		withLiveContext(
+			ctx,
+			() => {
+				for (const key of ACCOUNT_STATUS_KEYS) {
+					ctx.ui.setStatus(key, undefined);
+				}
+			},
 			undefined,
 		);
 	}
@@ -444,6 +517,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 		if (!withLiveContext(ctx, () => ctx.hasUI, false)) return;
 		if (!isManagedModel(ctx.model)) {
 			clearStatus(ctx);
+			clearAccountStatuses(ctx);
 			return;
 		}
 
@@ -451,16 +525,50 @@ export function createUsageStatusController(accountManager: AccountManager) {
 		if (text) {
 			withLiveContext(ctx, () => ctx.ui.setStatus(STATUS_KEY, text), undefined);
 		}
+		renderCachedAccountStatuses(ctx, preferencesOverride ?? preferences);
+	}
+
+	function renderCachedAccountStatuses(
+		ctx: ExtensionContext,
+		preferencesOverride: FooterPreferences,
+	): void {
+		if (!accountManager.getAccounts) return;
+		accountStatusGeneration++;
+		const accounts = getManagedStatusAccounts(accountManager);
+		withLiveContext(
+			ctx,
+			() => {
+				for (const [index, key] of ACCOUNT_STATUS_KEYS.entries()) {
+					const account = accounts?.[index];
+					ctx.ui.setStatus(
+						key,
+						account
+							? formatAccountStatusWidget(
+									ctx,
+									account.email,
+									accountManager.getCachedUsage(account.email),
+									preferencesOverride,
+								)
+							: undefined,
+					);
+				}
+			},
+			undefined,
+		);
 	}
 
 	async function updateStatus(ctx: ExtensionContext): Promise<void> {
 		if (!withLiveContext(ctx, () => ctx.hasUI, false)) return;
 		if (!isManagedModel(ctx.model)) {
 			clearStatus(ctx);
+			clearAccountStatuses(ctx);
 			return;
 		}
 
 		renderCachedStatus(ctx, livePreviewPreferences ?? preferences);
+		const generation = accountStatusGeneration;
+		const accountStatusAccounts =
+			getManagedStatusAccounts(accountManager) ?? [];
 
 		const activeAccount = getFooterAccount(accountManager);
 		if (!activeAccount) {
@@ -499,6 +607,36 @@ export function createUsageStatusController(accountManager: AccountManager) {
 					),
 				),
 			undefined,
+		);
+
+		await Promise.allSettled(
+			accountStatusAccounts.map(async (account, index) => {
+				const cachedUsage = accountManager.getCachedUsage(account.email);
+				let refreshedUsage: CodexUsageSnapshot | undefined;
+				try {
+					refreshedUsage = await accountManager.refreshUsageForAccount(account);
+				} catch {
+					return;
+				}
+				const usage = refreshedUsage ?? cachedUsage;
+				if (!usage || generation !== accountStatusGeneration) return;
+				const currentAccounts = getManagedStatusAccounts(accountManager) ?? [];
+				if (currentAccounts[index]?.email !== account.email) return;
+				withLiveContext(
+					ctx,
+					() =>
+						ctx.ui.setStatus(
+							ACCOUNT_STATUS_KEYS[index],
+							formatAccountStatusWidget(
+								ctx,
+								account.email,
+								usage,
+								livePreviewPreferences ?? preferences,
+							),
+						),
+					undefined,
+				);
+			}),
 		);
 	}
 
@@ -554,6 +692,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 		}
 		livePreviewPreferences = undefined;
 		clearStatus(ctx ?? activeContext);
+		clearAccountStatuses(ctx ?? activeContext);
 		activeContext = undefined;
 		queuedRefresh = false;
 	}

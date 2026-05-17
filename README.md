@@ -78,6 +78,13 @@ MultiCodex adds a live footer to your session showing the active account, 5-hour
 
 You can customize which fields appear and their ordering with `/multicodex footer`.
 
+The active-account status widget keeps the stable `multicodex-usage` ID. MultiCodex also publishes up to two managed-account widgets for custom status-line layouts:
+
+- `multicodex-account-usage-0`
+- `multicodex-account-usage-1`
+
+These per-account widgets show managed MultiCodex accounts only, ignore the ephemeral pi auth account, and render at most two accounts.
+
 ![MultiCodex footer settings](./assets/multicodex-footer-settings.png)
 
 ## What it does under the hood
