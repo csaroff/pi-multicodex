@@ -119,6 +119,12 @@ export function createStreamWrapper(
 						throw error;
 					}
 					accountManager.setRuntimeActiveAccount?.(account.email);
+					// The upstream Codex provider caches WebSocket sessions by sessionId.
+					// If a session was opened with a different Codex account, passing a new
+					// apiKey is not enough: the cached socket can keep using the old account.
+					// Close it before each managed stream so the selected Multicodex account is
+					// the one that authenticates the next Codex connection.
+					await closeCachedCodexWebSocketSession(options?.sessionId);
 					const abortController = createLinkedAbortController(options?.signal);
 
 					const internalModel: Model<"openai-codex-responses"> = {
@@ -167,7 +173,6 @@ export function createStreamWrapper(
 							accountManager.clearManualAccount();
 						}
 						excludedEmails.add(account.email);
-						await closeCachedCodexWebSocketSession(options?.sessionId);
 						abortController.abort();
 						retry = true;
 					};

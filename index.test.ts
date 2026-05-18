@@ -440,6 +440,61 @@ describe("manual account selection", () => {
 		expect(headerEmail).toBe("auto@example.com");
 	});
 
+	it("closes cached Codex session before starting a managed stream", async () => {
+		const closeCachedWebSockets = vi.fn();
+		setCloseCodexWebSocketSessionsForTest(closeCachedWebSockets);
+		const account = makeAccount("pro@example.com");
+		const calls: string[] = [];
+
+		const accountManager = {
+			waitUntilReady: async () => {},
+			syncImportedOpenAICodexAuth: async () => false,
+			getAvailableManualAccount: () => undefined,
+			hasManualAccount: () => false,
+			clearManualAccount: () => {},
+			activateBestAccount: async () => account,
+			ensureValidToken: async () => "pro-token",
+			setRuntimeActiveAccount: (email: string) => {
+				calls.push(`runtime:${email}`);
+			},
+			handleQuotaExceeded: async () => {},
+		} as unknown as AccountManager;
+
+		const baseProvider = {
+			streamSimple: () => {
+				calls.push("stream");
+				async function* inner() {
+					yield { type: "done" };
+				}
+				return inner() as unknown as AsyncIterable<unknown>;
+			},
+		};
+
+		closeCachedWebSockets.mockImplementation(async () => {
+			calls.push("close");
+		});
+
+		const stream = createStreamWrapper(
+			accountManager,
+			baseProvider as unknown as BaseProvider,
+		)(
+			{
+				id: "test",
+				provider: "openai-codex",
+				api: "openai-codex-responses",
+			} as StreamModel,
+			{} as StreamContext,
+			{ sessionId: "managed-session" } as StreamOptions,
+		);
+
+		for await (const _event of stream) {
+			// drain
+		}
+
+		expect(closeCachedWebSockets).toHaveBeenCalledWith("managed-session");
+		expect(calls).toEqual(["runtime:pro@example.com", "close", "stream"]);
+	});
+
 	it("clears manual on quota and retries with auto account", async () => {
 		const closeCachedWebSockets = vi.fn();
 		setCloseCodexWebSocketSessionsForTest(closeCachedWebSockets);
@@ -512,7 +567,7 @@ describe("manual account selection", () => {
 		expect(runtimeAccounts).toEqual(["manual@example.com", "auto@example.com"]);
 		expect(activateCount).toBe(1);
 		expect(closeCachedWebSockets).toHaveBeenCalledWith("quota-session");
-		expect(closeCachedWebSockets).toHaveBeenCalledTimes(1);
+		expect(closeCachedWebSockets).toHaveBeenCalledTimes(2);
 	});
 
 	it("rotates when quota failure is thrown during initial stream", async () => {
@@ -582,7 +637,7 @@ describe("manual account selection", () => {
 		expect(activateCount).toBe(2);
 		expect(events.some((event) => event.type === "error")).toBe(false);
 		expect(closeCachedWebSockets).toHaveBeenCalledWith("thrown-quota-session");
-		expect(closeCachedWebSockets).toHaveBeenCalledTimes(1);
+		expect(closeCachedWebSockets).toHaveBeenCalledTimes(2);
 	});
 
 	it("rotates when quota metadata refresh also hits quota", async () => {
@@ -728,7 +783,7 @@ describe("manual account selection", () => {
 		expect(closeCachedWebSockets).toHaveBeenCalledWith(
 			"buffered-start-quota-session",
 		);
-		expect(closeCachedWebSockets).toHaveBeenCalledTimes(1);
+		expect(closeCachedWebSockets).toHaveBeenCalledTimes(2);
 	});
 
 	it("skips auth-broken accounts before streaming and retries a healthy one", async () => {

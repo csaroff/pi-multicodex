@@ -264,8 +264,14 @@ export class AccountManager {
 			return;
 		}
 
+		const importedAccountId =
+			typeof imported.credentials.accountId === "string"
+				? imported.credentials.accountId
+				: undefined;
 		const alreadyManaged = this.data.accounts.find(
-			(a) => a.email === imported.identifier,
+			(a) =>
+				a.email === imported.identifier ||
+				(Boolean(importedAccountId) && a.accountId === importedAccountId),
 		);
 
 		if (alreadyManaged) {
@@ -279,10 +285,7 @@ export class AccountManager {
 			accessToken: imported.credentials.access,
 			refreshToken: imported.credentials.refresh,
 			expiresAt: imported.credentials.expires,
-			accountId:
-				typeof imported.credentials.accountId === "string"
-					? imported.credentials.accountId
-					: undefined,
+			accountId: importedAccountId,
 		};
 		this.notifyStateChanged();
 	}
