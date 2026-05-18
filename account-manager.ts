@@ -4,6 +4,7 @@ import {
 } from "@earendil-works/pi-ai/oauth";
 import { normalizeUnknownError } from "pi-provider-utils/streams";
 import { loadImportedOpenAICodexAuth } from "./auth";
+import { extractQuotaResetAt } from "./quota";
 import { isAccountAvailable, pickBestAccount } from "./selection";
 import {
 	type Account,
@@ -453,14 +454,17 @@ export class AccountManager {
 
 	async handleQuotaExceeded(
 		account: Account,
-		options?: { signal?: AbortSignal },
+		options?: { quotaError?: unknown; signal?: AbortSignal },
 	): Promise<void> {
-		const usage = await this.refreshUsageForAccount(account, {
-			force: true,
-			signal: options?.signal,
-		});
 		const now = Date.now();
-		const resetAt = getNextResetAt(usage);
+		let resetAt = extractQuotaResetAt(options?.quotaError, now);
+		if (!resetAt) {
+			const usage = await this.refreshUsageForAccount(account, {
+				force: true,
+				signal: options?.signal,
+			});
+			resetAt = getNextResetAt(usage);
+		}
 		const fallback = now + QUOTA_COOLDOWN_MS;
 		const until = resetAt && resetAt > now ? resetAt : fallback;
 		this.markExhausted(account.email, until);

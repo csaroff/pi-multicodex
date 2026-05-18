@@ -1,0 +1,50 @@
+# Libraries
+
+- `account-manager.ts` — class AccountManager
+- `auth.ts`
+  - function parseImportedOpenAICodexAuth: (auth, unknown>) => ImportedOpenAICodexAuth | undefined
+  - function loadImportedOpenAICodexAuth: () => Promise<
+  - interface ImportedOpenAICodexAuth
+- `browser.ts` — function openLoginInBrowser: (pi, ctx, url) => Promise<void>
+- `commands.ts` — function registerCommands: (pi, accountManager, statusController) => void
+- `hooks.ts` — function handleSessionStart: (accountManager, warningHandler?) => void, function handleNewSessionSwitch: (accountManager, warningHandler?) => void
+- `provider.ts`
+  - function getOpenAICodexMirror: () => void
+  - function buildMulticodexProviderConfig: (accountManager) => void
+  - interface ProviderModelDef
+  - const PROVIDER_ID
+- `quota.ts` — function isQuotaErrorMessage: (message) => boolean
+- `scripts/generate-synthetic-screenshots.py`
+  - function load_font: (size) -> ImageFont.FreeTypeFont
+  - function text_width: (draw, text, font) -> int
+  - function create_canvas: (width, height) -> tuple[Image.Image, ImageDraw.ImageDraw]
+  - function draw_segmented_text: (draw, x, y, font, segments, tuple[int, int, int]]]) -> None
+  - function draw_colored_footer: (draw, x, y, font, account_label, five_hour_usage, seven_day_usage) -> None
+  - function save_image: (image, filename) -> None
+  - _...3 more_
+- `selection.ts` — function isAccountAvailable: (account, now) => boolean, function pickBestAccount: (accounts, usageByEmail, CodexUsageSnapshot>, options?) => Account | undefined
+- `status.ts`
+  - function loadFooterPreferences: () => Promise<FooterPreferences>
+  - function persistFooterPreferences: (preferences) => Promise<void>
+  - function isManagedModel: (model) => boolean
+  - function formatActiveAccountStatus: (ctx, accountEmail, usage, preferences) => string
+  - function createUsageStatusController: (accountManager) => void
+  - interface FooterPreferences
+  - _...3 more_
+- `storage.ts`
+  - function loadStorage: () => StorageData
+  - function saveStorage: (data) => void
+  - type Account
+  - type StorageData
+  - const StorageSchema
+  - const STORAGE_FILE
+- `stream-wrapper.ts` — function setCloseCodexWebSocketSessionsForTest: (handler) => void, function createStreamWrapper: (accountManager, baseProvider) => void
+- `usage-client.ts` — function fetchCodexUsage: (accessToken, accountId, options?) => Promise<CodexUsageSnapshot>
+- `usage.ts`
+  - function parseCodexUsageResponse: (data) => Omit<CodexUsageSnapshot, "fetchedAt">
+  - function isUsageUntouched: (usage?) => boolean
+  - function getNextResetAt: (usage?) => number | undefined
+  - function getMaxUsedPercent: (usage?) => number | undefined
+  - function getWeeklyResetAt: (usage?) => number | undefined
+  - function formatResetAt: (resetAt?) => string
+  - _...1 more_

@@ -66,6 +66,15 @@ type ApiProviderRef = {
 	) => AssistantMessageEventStream;
 };
 
+function isRetrySafePreOutputEvent(event: AssistantMessageEvent): boolean {
+	return (
+		event.type === "start" ||
+		event.type === "text_start" ||
+		event.type === "thinking_start" ||
+		event.type === "toolcall_start"
+	);
+}
+
 export function createStreamWrapper(
 	accountManager: AccountManager,
 	baseProvider: ApiProviderRef,
@@ -149,19 +158,21 @@ export function createStreamWrapper(
 						},
 					);
 
-					let forwardedNonStartEvent = false;
-					let bufferedStartEvent: AssistantMessageEvent | undefined;
+					let outputStarted = false;
+					const bufferedPreOutputEvents: AssistantMessageEvent[] = [];
 					let retry = false;
-					const flushBufferedStart = () => {
-						if (!bufferedStartEvent) return;
-						stream.push(
-							rewriteProviderOnEvent(bufferedStartEvent, model.provider),
-						);
-						bufferedStartEvent = undefined;
+					const flushBufferedPreOutputEvents = () => {
+						for (const bufferedEvent of bufferedPreOutputEvents) {
+							stream.push(
+								rewriteProviderOnEvent(bufferedEvent, model.provider),
+							);
+						}
+						bufferedPreOutputEvents.length = 0;
 					};
-					const rotateAfterQuota = async () => {
+					const rotateAfterQuota = async (quotaError: unknown) => {
 						try {
 							await accountManager.handleQuotaExceeded(account, {
+								quotaError,
 								signal: options?.signal,
 							});
 						} catch (error) {
@@ -179,8 +190,8 @@ export function createStreamWrapper(
 
 					try {
 						for await (const event of inner) {
-							if (event.type === "start" && !forwardedNonStartEvent) {
-								bufferedStartEvent = event;
+							if (!outputStarted && isRetrySafePreOutputEvent(event)) {
+								bufferedPreOutputEvents.push(event);
 								continue;
 							}
 
@@ -190,22 +201,22 @@ export function createStreamWrapper(
 
 								if (
 									isQuota &&
-									!forwardedNonStartEvent &&
+									!outputStarted &&
 									attempt < MAX_ROTATION_RETRIES
 								) {
-									await rotateAfterQuota();
+									await rotateAfterQuota(event.error);
 									break;
 								}
 
-								flushBufferedStart();
+								flushBufferedPreOutputEvents();
 								stream.push(rewriteProviderOnEvent(event, model.provider));
 								stream.end();
 								return;
 							}
 
-							flushBufferedStart();
-							if (event.type !== "start") {
-								forwardedNonStartEvent = true;
+							flushBufferedPreOutputEvents();
+							if (event.type !== "done") {
+								outputStarted = true;
 							}
 							stream.push(rewriteProviderOnEvent(event, model.provider));
 
@@ -217,14 +228,10 @@ export function createStreamWrapper(
 					} catch (error) {
 						const isQuota = isQuotaErrorMessage(normalizeUnknownError(error));
 
-						if (
-							isQuota &&
-							!forwardedNonStartEvent &&
-							attempt < MAX_ROTATION_RETRIES
-						) {
-							await rotateAfterQuota();
+						if (isQuota && !outputStarted && attempt < MAX_ROTATION_RETRIES) {
+							await rotateAfterQuota(error);
 						} else {
-							flushBufferedStart();
+							flushBufferedPreOutputEvents();
 							throw error;
 						}
 					}

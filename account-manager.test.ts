@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
 	storageData: {
@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
 	},
 	loadImportedOpenAICodexAuth: vi.fn(),
 	saveStorage: vi.fn(),
+	fetchCodexUsage: vi.fn(),
 }));
 
 vi.mock("./storage", () => ({
@@ -22,6 +23,10 @@ vi.mock("./auth", () => ({
 	loadImportedOpenAICodexAuth: mocks.loadImportedOpenAICodexAuth,
 }));
 
+vi.mock("./usage-client", () => ({
+	fetchCodexUsage: mocks.fetchCodexUsage,
+}));
+
 vi.mock("@earendil-works/pi-ai/oauth", () => ({
 	refreshOpenAICodexToken: vi.fn(),
 }));
@@ -34,6 +39,7 @@ describe("AccountManager usage warnings", () => {
 		mocks.storageData.accounts = [];
 		mocks.storageData.activeEmail = undefined;
 		mocks.loadImportedOpenAICodexAuth.mockResolvedValue(undefined);
+		mocks.fetchCodexUsage.mockRejectedValue(new Error("network failure"));
 	});
 
 	it("does not warn when usage refresh is aborted", async () => {
@@ -52,6 +58,60 @@ describe("AccountManager usage warnings", () => {
 			manager.refreshUsageForAccount(account, { signal: controller.signal }),
 		).resolves.toBeUndefined();
 		expect(warningHandler).not.toHaveBeenCalled();
+	});
+});
+
+describe("AccountManager quota exhaustion", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-05-18T10:00:00Z"));
+		vi.clearAllMocks();
+		mocks.storageData.accounts = [];
+		mocks.storageData.activeEmail = undefined;
+		mocks.loadImportedOpenAICodexAuth.mockResolvedValue(undefined);
+		mocks.fetchCodexUsage.mockRejectedValue(new Error("usage unavailable"));
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("uses reset metadata from the original quota error before usage refresh", async () => {
+		const manager = new AccountManager();
+		const account = manager.addOrUpdateAccount("quota@example.com", {
+			access: "access",
+			refresh: "refresh",
+			expires: Date.now() + 3600_000,
+		});
+		mocks.saveStorage.mockClear();
+
+		await manager.handleQuotaExceeded(account, {
+			quotaError: new Error(
+				'Codex error: {"headers":{"X-Codex-Primary-Reset-After-Seconds":"225"}}',
+			),
+		});
+
+		expect(account.quotaExhaustedUntil).toBe(Date.now() + 225_000);
+		expect(mocks.fetchCodexUsage).not.toHaveBeenCalled();
+		expect(mocks.saveStorage).toHaveBeenCalled();
+	});
+
+	it("persists a fallback exhaustion window when reset metadata and usage refresh are unavailable", async () => {
+		const manager = new AccountManager();
+		const account = manager.addOrUpdateAccount("fallback@example.com", {
+			access: "access",
+			refresh: "refresh",
+			expires: Date.now() + 3600_000,
+		});
+		mocks.saveStorage.mockClear();
+
+		await manager.handleQuotaExceeded(account, {
+			quotaError: new Error("You have hit your ChatGPT usage limit."),
+		});
+
+		expect(account.quotaExhaustedUntil).toBe(Date.now() + 3600_000);
+		expect(mocks.fetchCodexUsage).toHaveBeenCalled();
+		expect(mocks.saveStorage).toHaveBeenCalled();
 	});
 });
 

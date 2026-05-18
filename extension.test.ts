@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
 	registerCommands: vi.fn(),
 	handleSessionStart: vi.fn(),
 	handleNewSessionSwitch: vi.fn(),
-	buildMulticodexProviderConfig: vi.fn(() => ({ mocked: true })),
+	installMulticodexProviderWrapper: vi.fn(),
 	setWarningHandler: vi.fn(),
 	resetSessionWarnings: vi.fn(),
 	statusRefreshFor: vi.fn(),
@@ -31,8 +31,7 @@ vi.mock("./hooks", () => ({
 }));
 
 vi.mock("./provider", () => ({
-	PROVIDER_ID: "openai-codex",
-	buildMulticodexProviderConfig: mocks.buildMulticodexProviderConfig,
+	installMulticodexProviderWrapper: mocks.installMulticodexProviderWrapper,
 }));
 
 vi.mock("./status", () => ({
@@ -52,7 +51,7 @@ describe("multicodexExtension", () => {
 		mocks.registerCommands.mockClear();
 		mocks.handleSessionStart.mockClear();
 		mocks.handleNewSessionSwitch.mockClear();
-		mocks.buildMulticodexProviderConfig.mockClear();
+		mocks.installMulticodexProviderWrapper.mockClear();
 		mocks.setWarningHandler.mockClear();
 		mocks.resetSessionWarnings.mockClear();
 		mocks.statusRefreshFor.mockClear();
@@ -75,10 +74,11 @@ describe("multicodexExtension", () => {
 		} as never);
 
 		expect(mocks.setWarningHandler).toHaveBeenCalledOnce();
-		expect(mocks.buildMulticodexProviderConfig).toHaveBeenCalledOnce();
-		expect(registerProvider).toHaveBeenCalledWith("openai-codex", {
-			mocked: true,
-		});
+		expect(mocks.installMulticodexProviderWrapper).toHaveBeenCalledOnce();
+		expect(mocks.installMulticodexProviderWrapper).toHaveBeenCalledWith(
+			expect.objectContaining({ registerProvider }),
+			expect.any(Object),
+		);
 		expect(mocks.registerCommands).toHaveBeenCalledOnce();
 		expect(on).toHaveBeenCalledTimes(4);
 		expect(handlers.has("session_start")).toBe(true);
@@ -109,6 +109,7 @@ describe("multicodexExtension", () => {
 		expect(sessionShutdown).toBeTypeOf("function");
 
 		sessionStart?.({ reason: "startup" }, ctx as never);
+		expect(mocks.installMulticodexProviderWrapper).toHaveBeenCalledTimes(2);
 		expect(mocks.resetSessionWarnings).toHaveBeenCalledTimes(1);
 		expect(mocks.handleSessionStart).toHaveBeenCalledOnce();
 		expect(mocks.handleNewSessionSwitch).not.toHaveBeenCalled();
@@ -119,6 +120,7 @@ describe("multicodexExtension", () => {
 		});
 
 		sessionStart?.({ reason: "new" }, ctx as never);
+		expect(mocks.installMulticodexProviderWrapper).toHaveBeenCalledTimes(3);
 		expect(mocks.resetSessionWarnings).toHaveBeenCalledTimes(2);
 		expect(mocks.handleNewSessionSwitch).toHaveBeenCalledOnce();
 		expect(mocks.statusStartAutoRefresh).toHaveBeenCalledTimes(2);

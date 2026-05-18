@@ -5,6 +5,7 @@ import {
 	type AccountManager,
 	buildMulticodexProviderConfig,
 	createStreamWrapper,
+	extractQuotaResetAt,
 	getNextResetAt,
 	getOpenAICodexMirror,
 	getWeeklyResetAt,
@@ -43,6 +44,58 @@ describe("isQuotaErrorMessage", () => {
 	it("does not match unrelated errors", () => {
 		expect(isQuotaErrorMessage("network error")).toBe(false);
 		expect(isQuotaErrorMessage("bad request")).toBe(false);
+	});
+});
+
+describe("extractQuotaResetAt", () => {
+	const now = 1_700_000_000_000;
+
+	it("extracts reset timestamps from structured fields", () => {
+		expect(extractQuotaResetAt({ resets_at: 1_700_000_300 }, now)).toBe(
+			1_700_000_300_000,
+		);
+		expect(extractQuotaResetAt({ resets_in_seconds: 225 }, now)).toBe(
+			now + 225_000,
+		);
+	});
+
+	it("extracts primary reset headers from embedded Codex JSON", () => {
+		const error = new Error(
+			'Codex error: {"status_code":429,"headers":{"X-Codex-Primary-Reset-After-Seconds":"300"}}',
+		);
+
+		expect(extractQuotaResetAt(error, now)).toBe(now + 300_000);
+	});
+
+	it("extracts primary reset-at headers from response metadata", () => {
+		expect(
+			extractQuotaResetAt(
+				{
+					response: {
+						headers: { "x-codex-primary-reset-at": "2023-11-14T22:18:20Z" },
+					},
+				},
+				now,
+			),
+		).toBe(1_700_000_300_000);
+	});
+
+	it("extracts friendly try-again text", () => {
+		expect(
+			extractQuotaResetAt(
+				"You have hit your ChatGPT usage limit. Try again in ~225 min.",
+				now,
+			),
+		).toBe(now + 225 * 60_000);
+	});
+
+	it("ignores malformed and past reset hints", () => {
+		expect(
+			extractQuotaResetAt({ resets_at: "not-a-date" }, now),
+		).toBeUndefined();
+		expect(
+			extractQuotaResetAt({ resets_at: now - 60_000 }, now),
+		).toBeUndefined();
 	});
 });
 
@@ -440,6 +493,77 @@ describe("manual account selection", () => {
 		expect(headerEmail).toBe("auto@example.com");
 	});
 
+	it("passes the selected token and diagnostic header without mutating caller inputs", async () => {
+		const account = makeAccount("auto@example.com");
+		const captured: Array<{
+			headers?: Record<string, string>;
+			apiKey?: string;
+			customOption?: string;
+		}> = [];
+
+		const accountManager = {
+			waitUntilReady: async () => {},
+			syncImportedOpenAICodexAuth: async () => false,
+			getAvailableManualAccount: () => undefined,
+			hasManualAccount: () => false,
+			clearManualAccount: () => {},
+			activateBestAccount: async () => account,
+			ensureValidToken: async () => "selected-token",
+			handleQuotaExceeded: async () => {},
+		} as unknown as AccountManager;
+
+		const baseProvider = {
+			streamSimple: (
+				model: { headers?: Record<string, string> },
+				_context: unknown,
+				options?: { apiKey?: string; customOption?: string },
+			) => {
+				captured.push({
+					headers: model.headers,
+					apiKey: options?.apiKey,
+					customOption: options?.customOption,
+				});
+				async function* inner() {
+					yield { type: "done" };
+				}
+				return inner() as unknown as AsyncIterable<unknown>;
+			},
+		};
+
+		const model = {
+			id: "test",
+			provider: "openai-codex",
+			api: "openai-codex-responses",
+			headers: { Existing: "yes" },
+		} as unknown as StreamModel;
+		const options = {
+			apiKey: "original-token",
+			customOption: "preserved",
+		} as StreamOptions & { customOption: string };
+
+		const stream = createStreamWrapper(
+			accountManager,
+			baseProvider as unknown as BaseProvider,
+		)(model, {} as StreamContext, options);
+
+		for await (const _event of stream) {
+			// drain
+		}
+
+		expect(captured).toEqual([
+			{
+				headers: {
+					Existing: "yes",
+					"X-Multicodex-Account": "auto@example.com",
+				},
+				apiKey: "selected-token",
+				customOption: "preserved",
+			},
+		]);
+		expect(model.headers).toEqual({ Existing: "yes" });
+		expect(options.apiKey).toBe("original-token");
+	});
+
 	it("closes cached Codex session before starting a managed stream", async () => {
 		const closeCachedWebSockets = vi.fn();
 		setCloseCodexWebSocketSessionsForTest(closeCachedWebSockets);
@@ -784,6 +908,250 @@ describe("manual account selection", () => {
 			"buffered-start-quota-session",
 		);
 		expect(closeCachedWebSockets).toHaveBeenCalledTimes(2);
+	});
+
+	it.each([
+		"text_start",
+		"thinking_start",
+		"toolcall_start",
+	])("rotates when %s precedes a quota error", async (preOutputType) => {
+		const first = makeAccount("first@example.com");
+		const second = makeAccount("second@example.com");
+		let activateCount = 0;
+		const headers: string[] = [];
+		const exhausted: string[] = [];
+		const events: Array<{ type?: string }> = [];
+
+		const accountManager = {
+			waitUntilReady: async () => {},
+			syncImportedOpenAICodexAuth: async () => false,
+			getAvailableManualAccount: () => undefined,
+			hasManualAccount: () => false,
+			clearManualAccount: () => {},
+			activateBestAccount: async (options?: {
+				excludeEmails?: Set<string>;
+			}) => {
+				activateCount += 1;
+				return options?.excludeEmails?.has(first.email) ? second : first;
+			},
+			ensureValidToken: async (account: Account) => `${account.email}-token`,
+			handleQuotaExceeded: async (account: Account) => {
+				exhausted.push(account.email);
+			},
+		} as unknown as AccountManager;
+
+		const baseProvider = {
+			streamSimple: (model: { headers?: Record<string, string> }) => {
+				headers.push(model.headers?.["X-Multicodex-Account"] || "");
+				async function* inner() {
+					if (model.headers?.["X-Multicodex-Account"] === first.email) {
+						yield { type: preOutputType };
+						yield { type: "error", error: { errorMessage: "quota exceeded" } };
+						return;
+					}
+					yield { type: "done" };
+				}
+				return inner() as unknown as AsyncIterable<unknown>;
+			},
+		};
+
+		const stream = createStreamWrapper(
+			accountManager,
+			baseProvider as unknown as BaseProvider,
+		)(
+			{
+				id: "test",
+				provider: "openai-codex",
+				api: "openai-codex-responses",
+			} as StreamModel,
+			{} as StreamContext,
+		);
+
+		for await (const event of stream) {
+			events.push(event as { type?: string });
+		}
+
+		expect(headers).toEqual(["first@example.com", "second@example.com"]);
+		expect(exhausted).toEqual(["first@example.com"]);
+		expect(activateCount).toBe(2);
+		expect(events.map((event) => event.type)).toEqual(["done"]);
+	});
+
+	it.each([
+		"text_delta",
+		"thinking_delta",
+		"toolcall_delta",
+		"toolcall_end",
+	])("does not rotate after meaningful %s output", async (outputType) => {
+		const account = makeAccount("first@example.com");
+		let activateCount = 0;
+		const exhausted: string[] = [];
+		const events: Array<{ type?: string }> = [];
+
+		const accountManager = {
+			waitUntilReady: async () => {},
+			syncImportedOpenAICodexAuth: async () => false,
+			getAvailableManualAccount: () => undefined,
+			hasManualAccount: () => false,
+			clearManualAccount: () => {},
+			activateBestAccount: async () => {
+				activateCount += 1;
+				return account;
+			},
+			ensureValidToken: async () => "token",
+			handleQuotaExceeded: async (exhaustedAccount: Account) => {
+				exhausted.push(exhaustedAccount.email);
+			},
+		} as unknown as AccountManager;
+
+		const baseProvider = {
+			streamSimple: () => {
+				async function* inner() {
+					yield { type: "text_start" };
+					yield { type: outputType };
+					yield { type: "error", error: { errorMessage: "quota exceeded" } };
+				}
+				return inner() as unknown as AsyncIterable<unknown>;
+			},
+		};
+
+		const stream = createStreamWrapper(
+			accountManager,
+			baseProvider as unknown as BaseProvider,
+		)(
+			{
+				id: "test",
+				provider: "openai-codex",
+				api: "openai-codex-responses",
+			} as StreamModel,
+			{} as StreamContext,
+		);
+
+		for await (const event of stream) {
+			events.push(event as { type?: string });
+		}
+
+		expect(activateCount).toBe(1);
+		expect(exhausted).toEqual([]);
+		expect(events.map((event) => event.type)).toEqual([
+			"text_start",
+			outputType,
+			"error",
+		]);
+	});
+
+	it("treats unknown non-terminal events as meaningful output", async () => {
+		const account = makeAccount("first@example.com");
+		let activateCount = 0;
+		const exhausted: string[] = [];
+		const events: Array<{ type?: string }> = [];
+
+		const accountManager = {
+			waitUntilReady: async () => {},
+			syncImportedOpenAICodexAuth: async () => false,
+			getAvailableManualAccount: () => undefined,
+			hasManualAccount: () => false,
+			clearManualAccount: () => {},
+			activateBestAccount: async () => {
+				activateCount += 1;
+				return account;
+			},
+			ensureValidToken: async () => "token",
+			handleQuotaExceeded: async (exhaustedAccount: Account) => {
+				exhausted.push(exhaustedAccount.email);
+			},
+		} as unknown as AccountManager;
+
+		const baseProvider = {
+			streamSimple: () => {
+				async function* inner() {
+					yield { type: "future_event" };
+					yield { type: "error", error: { errorMessage: "quota exceeded" } };
+				}
+				return inner() as unknown as AsyncIterable<unknown>;
+			},
+		};
+
+		const stream = createStreamWrapper(
+			accountManager,
+			baseProvider as unknown as BaseProvider,
+		)(
+			{
+				id: "test",
+				provider: "openai-codex",
+				api: "openai-codex-responses",
+			} as StreamModel,
+			{} as StreamContext,
+		);
+
+		for await (const event of stream) {
+			events.push(event as { type?: string });
+		}
+
+		expect(activateCount).toBe(1);
+		expect(exhausted).toEqual([]);
+		expect(events.map((event) => event.type)).toEqual([
+			"future_event",
+			"error",
+		]);
+	});
+
+	it("replays buffered pre-output events once before the first meaningful output", async () => {
+		const account = makeAccount("first@example.com");
+		let activateCount = 0;
+		const events: Array<{ type?: string }> = [];
+
+		const accountManager = {
+			waitUntilReady: async () => {},
+			syncImportedOpenAICodexAuth: async () => false,
+			getAvailableManualAccount: () => undefined,
+			hasManualAccount: () => false,
+			clearManualAccount: () => {},
+			activateBestAccount: async () => {
+				activateCount += 1;
+				return account;
+			},
+			ensureValidToken: async () => "token",
+			handleQuotaExceeded: async () => {},
+		} as unknown as AccountManager;
+
+		const baseProvider = {
+			streamSimple: () => {
+				async function* inner() {
+					yield { type: "start" };
+					yield { type: "text_start" };
+					yield { type: "thinking_start" };
+					yield { type: "text_delta" };
+					yield { type: "done" };
+				}
+				return inner() as unknown as AsyncIterable<unknown>;
+			},
+		};
+
+		const stream = createStreamWrapper(
+			accountManager,
+			baseProvider as unknown as BaseProvider,
+		)(
+			{
+				id: "test",
+				provider: "openai-codex",
+				api: "openai-codex-responses",
+			} as StreamModel,
+			{} as StreamContext,
+		);
+
+		for await (const event of stream) {
+			events.push(event as { type?: string });
+		}
+
+		expect(activateCount).toBe(1);
+		expect(events.map((event) => event.type)).toEqual([
+			"start",
+			"text_start",
+			"thinking_start",
+			"text_delta",
+			"done",
+		]);
 	});
 
 	it("skips auth-broken accounts before streaming and retries a healthy one", async () => {

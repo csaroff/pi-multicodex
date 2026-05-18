@@ -4,10 +4,11 @@ export { default } from "./extension";
 export {
 	buildMulticodexProviderConfig,
 	getOpenAICodexMirror,
+	installMulticodexProviderWrapper,
 	PROVIDER_ID,
 	type ProviderModelDef,
 } from "./provider";
-export { isQuotaErrorMessage } from "./quota";
+export { extractQuotaResetAt, isQuotaErrorMessage } from "./quota";
 export {
 	isAccountAvailable,
 	pickBestAccount,

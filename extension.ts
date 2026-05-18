@@ -6,7 +6,7 @@ import type {
 import { AccountManager } from "./account-manager";
 import { registerCommands } from "./commands";
 import { handleNewSessionSwitch, handleSessionStart } from "./hooks";
-import { buildMulticodexProviderConfig, PROVIDER_ID } from "./provider";
+import { installMulticodexProviderWrapper } from "./provider";
 import { createUsageStatusController } from "./status";
 
 export default function multicodexExtension(pi: ExtensionAPI) {
@@ -43,17 +43,13 @@ export default function multicodexExtension(pi: ExtensionAPI) {
 		notifyWarning(lastContext, message);
 	});
 
-	pi.registerProvider(
-		PROVIDER_ID,
-		buildMulticodexProviderConfig(accountManager) as unknown as Parameters<
-			typeof pi.registerProvider
-		>[1],
-	);
+	installMulticodexProviderWrapper(pi, accountManager);
 
 	registerCommands(pi, accountManager, statusController);
 
 	pi.on("session_start", (event: SessionStartEvent, ctx: ExtensionContext) => {
 		lastContext = ctx;
+		installMulticodexProviderWrapper(pi, accountManager);
 		accountManager.resetSessionWarnings();
 		handleSessionStart(accountManager, (msg) => notifyWarning(ctx, msg));
 		if (event.reason === "new") {
