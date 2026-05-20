@@ -619,6 +619,61 @@ describe("manual account selection", () => {
 		expect(calls).toEqual(["runtime:pro@example.com", "close", "stream"]);
 	});
 
+	it("continues streaming when cached Codex session cleanup fails", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const closeCachedWebSockets = vi.fn(async () => {
+			throw new Error("socket already closing");
+		});
+		setCloseCodexWebSocketSessionsForTest(closeCachedWebSockets);
+		const account = makeAccount("pro@example.com");
+
+		const accountManager = {
+			waitUntilReady: async () => {},
+			syncImportedOpenAICodexAuth: async () => false,
+			getAvailableManualAccount: () => undefined,
+			hasManualAccount: () => false,
+			clearManualAccount: () => {},
+			activateBestAccount: async () => account,
+			ensureValidToken: async () => "pro-token",
+			setRuntimeActiveAccount: () => {},
+			handleQuotaExceeded: async () => {},
+		} as unknown as AccountManager;
+
+		const baseProvider = {
+			streamSimple: () => {
+				async function* inner() {
+					yield { type: "done" };
+				}
+				return inner() as unknown as AsyncIterable<unknown>;
+			},
+		};
+
+		const stream = createStreamWrapper(
+			accountManager,
+			baseProvider as unknown as BaseProvider,
+		)(
+			{
+				id: "test",
+				provider: "openai-codex",
+				api: "openai-codex-responses",
+			} as StreamModel,
+			{} as StreamContext,
+			{ sessionId: "managed-session" } as StreamOptions,
+		);
+
+		const events = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		expect(events).toEqual([expect.objectContaining({ type: "done" })]);
+		expect(closeCachedWebSockets).toHaveBeenCalledWith("managed-session");
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining("failed to close cached Codex WebSocket session"),
+		);
+		warn.mockRestore();
+	});
+
 	it("clears manual on quota and retries with auto account", async () => {
 		const closeCachedWebSockets = vi.fn();
 		setCloseCodexWebSocketSessionsForTest(closeCachedWebSockets);

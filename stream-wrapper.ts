@@ -35,12 +35,13 @@ async function closeCachedCodexWebSocketSession(
 	sessionId: string | undefined,
 ): Promise<void> {
 	if (!sessionId) return;
-	if (closeCodexWebSocketSessionsForTest) {
-		await closeCodexWebSocketSessionsForTest(sessionId);
-		return;
-	}
 
 	try {
+		if (closeCodexWebSocketSessionsForTest) {
+			await closeCodexWebSocketSessionsForTest(sessionId);
+			return;
+		}
+
 		const mod = (await import(OPENAI_CODEX_RESPONSES_MODULE)) as {
 			closeOpenAICodexWebSocketSessions?: CloseCodexWebSocketSessions;
 		};
