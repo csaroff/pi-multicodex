@@ -10,10 +10,12 @@
 - `hooks.ts` — function handleSessionStart: (accountManager, warningHandler?) => void, function handleNewSessionSwitch: (accountManager, warningHandler?) => void
 - `provider.ts`
   - function getOpenAICodexMirror: () => void
-  - function buildMulticodexProviderConfig: (accountManager) => void
+  - function buildMulticodexProviderConfig: (accountManager, baseProvider) => void
+  - function installMulticodexProviderWrapper: (pi, accountManager) => void
+  - function resetMulticodexProviderWrapperForTest: () => void
   - interface ProviderModelDef
   - const PROVIDER_ID
-- `quota.ts` — function isQuotaErrorMessage: (message) => boolean
+- `quota.ts` — function isQuotaErrorMessage: (message) => boolean, function extractQuotaResetAt: (quotaError, now) => void
 - `scripts/generate-synthetic-screenshots.py`
   - function load_font: (size) -> ImageFont.FreeTypeFont
   - function text_width: (draw, text, font) -> int

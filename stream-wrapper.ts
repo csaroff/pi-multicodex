@@ -22,10 +22,6 @@ const OPENAI_CODEX_RESPONSES_MODULE =
 
 type CloseCodexWebSocketSessions = (sessionId?: string) => void | Promise<void>;
 
-const importModule = new Function("specifier", "return import(specifier)") as (
-	specifier: string,
-) => Promise<unknown>;
-
 let closeCodexWebSocketSessionsForTest: CloseCodexWebSocketSessions | undefined;
 let warnedWebSocketCleanupFailure = false;
 
@@ -45,7 +41,7 @@ async function closeCachedCodexWebSocketSession(
 	}
 
 	try {
-		const mod = (await importModule(OPENAI_CODEX_RESPONSES_MODULE)) as {
+		const mod = (await import(OPENAI_CODEX_RESPONSES_MODULE)) as {
 			closeOpenAICodexWebSocketSessions?: CloseCodexWebSocketSessions;
 		};
 		await mod.closeOpenAICodexWebSocketSessions?.(sessionId);
