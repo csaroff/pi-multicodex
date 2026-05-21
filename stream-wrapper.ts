@@ -7,7 +7,6 @@ import {
 	type Model,
 	type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { closeOpenAICodexWebSocketSessions } from "@earendil-works/pi-ai/openai-codex-responses";
 import {
 	createErrorAssistantMessage,
 	createLinkedAbortController,
@@ -18,16 +17,34 @@ import type { AccountManager } from "./account-manager";
 import { isQuotaErrorMessage } from "./quota";
 
 const MAX_ROTATION_RETRIES = 5;
+const OPENAI_CODEX_RESPONSES_PROVIDER_PATH =
+	"./providers/openai-codex-responses.js";
 
 type CloseCodexWebSocketSessions = (sessionId?: string) => void | Promise<void>;
+type OpenAICodexResponsesModule = {
+	closeOpenAICodexWebSocketSessions?: CloseCodexWebSocketSessions;
+};
 
 let closeCodexWebSocketSessionsForTest: CloseCodexWebSocketSessions | undefined;
 let warnedWebSocketCleanupFailure = false;
+let openAICodexResponsesModulePromise:
+	| Promise<OpenAICodexResponsesModule>
+	| undefined;
 
 export function setCloseCodexWebSocketSessionsForTest(
 	handler: CloseCodexWebSocketSessions | undefined,
 ): void {
 	closeCodexWebSocketSessionsForTest = handler;
+}
+
+async function loadOpenAICodexResponsesModule(): Promise<OpenAICodexResponsesModule> {
+	openAICodexResponsesModulePromise ??= import(
+		new URL(
+			OPENAI_CODEX_RESPONSES_PROVIDER_PATH,
+			import.meta.resolve("@earendil-works/pi-ai"),
+		).href
+	) as Promise<OpenAICodexResponsesModule>;
+	return openAICodexResponsesModulePromise;
 }
 
 async function closeCachedCodexWebSocketSession(
@@ -41,7 +58,8 @@ async function closeCachedCodexWebSocketSession(
 			return;
 		}
 
-		await closeOpenAICodexWebSocketSessions(sessionId);
+		const mod = await loadOpenAICodexResponsesModule();
+		await mod.closeOpenAICodexWebSocketSessions?.(sessionId);
 	} catch (error) {
 		if (warnedWebSocketCleanupFailure) return;
 		warnedWebSocketCleanupFailure = true;
