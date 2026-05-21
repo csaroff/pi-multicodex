@@ -7,6 +7,7 @@ import {
 	type Model,
 	type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
+import { closeOpenAICodexWebSocketSessions } from "@earendil-works/pi-ai/openai-codex-responses";
 import {
 	createErrorAssistantMessage,
 	createLinkedAbortController,
@@ -17,8 +18,6 @@ import type { AccountManager } from "./account-manager";
 import { isQuotaErrorMessage } from "./quota";
 
 const MAX_ROTATION_RETRIES = 5;
-const OPENAI_CODEX_RESPONSES_MODULE =
-	"@earendil-works/pi-ai/openai-codex-responses";
 
 type CloseCodexWebSocketSessions = (sessionId?: string) => void | Promise<void>;
 
@@ -42,10 +41,7 @@ async function closeCachedCodexWebSocketSession(
 			return;
 		}
 
-		const mod = (await import(OPENAI_CODEX_RESPONSES_MODULE)) as {
-			closeOpenAICodexWebSocketSessions?: CloseCodexWebSocketSessions;
-		};
-		await mod.closeOpenAICodexWebSocketSessions?.(sessionId);
+		await closeOpenAICodexWebSocketSessions(sessionId);
 	} catch (error) {
 		if (warnedWebSocketCleanupFailure) return;
 		warnedWebSocketCleanupFailure = true;
