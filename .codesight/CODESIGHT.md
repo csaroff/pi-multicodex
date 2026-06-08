@@ -2,9 +2,9 @@
 
 > **Stack:** raw-http | none | unknown | typescript
 
-> 0 routes | 0 models | 0 components | 14 lib files | 0 env vars | 4 middleware | 0% test coverage
-> **Token savings:** this file is ~1,500 tokens. Without it, AI exploration would cost ~11,500 tokens. **Saves ~10,000 tokens per conversation.**
-> **Last scanned:** 2026-05-21 06:21 — re-run after significant changes
+> 0 routes | 0 models | 0 components | 14 lib files | 1 env vars | 4 middleware | 0% test coverage
+> **Token savings:** this file is ~1,500 tokens. Without it, AI exploration would cost ~11,600 tokens. **Saves ~10,100 tokens per conversation.**
+> **Last scanned:** 2026-06-08 13:06 — re-run after significant changes
 
 ---
 
@@ -38,11 +38,11 @@
 - `status.ts`
   - function loadFooterPreferences: () => Promise<FooterPreferences>
   - function persistFooterPreferences: (preferences) => Promise<void>
+  - function formatUsageSummaryText: (usage, mode) => string
   - function isManagedModel: (model) => boolean
   - function formatActiveAccountStatus: (ctx, accountEmail, usage, preferences) => string
   - function createUsageStatusController: (accountManager) => void
-  - interface FooterPreferences
-  - _...3 more_
+  - _...4 more_
 - `storage.ts`
   - function loadStorage: () => StorageData
   - function saveStorage: (data) => void
@@ -64,6 +64,10 @@
 ---
 
 # Config
+
+## Environment Variables
+
+- `PI_CODING_AGENT_DIR` **required** — index.test.ts
 
 ## Config Files
 
@@ -98,9 +102,9 @@
 - `storage.ts` — imported by **4** files
 - `auth.ts` — imported by **3** files
 - `quota.ts` — imported by **3** files
-- `status.ts` — imported by **3** files
 - `stream-wrapper.ts` — imported by **3** files
 - `commands.ts` — imported by **2** files
+- `status.ts` — imported by **2** files
 - `extension.ts` — imported by **2** files
 - `hooks.ts` — imported by **2** files
 - `provider.ts` — imported by **2** files
@@ -116,9 +120,9 @@
 - `storage.ts` ← `commands.ts`, `index.ts`, `scripts/generate-schema.ts`, `selection.ts`
 - `auth.ts` ← `account-manager.ts`, `auth.test.ts`, `index.ts`
 - `quota.ts` ← `account-manager.ts`, `index.ts`, `stream-wrapper.ts`
-- `status.ts` ← `commands.test.ts`, `commands.ts`, `extension.ts`
 - `stream-wrapper.ts` ← `index.test.ts`, `index.ts`, `provider.ts`
 - `commands.ts` ← `commands.test.ts`, `extension.ts`
+- `status.ts` ← `commands.test.ts`, `extension.ts`
 - `extension.ts` ← `extension.test.ts`, `index.ts`
 - `hooks.ts` ← `extension.ts`, `hooks.test.ts`
 

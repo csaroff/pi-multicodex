@@ -3,13 +3,13 @@ import type { AccountManager } from "./account-manager";
 import { registerCommands } from "./commands";
 import type { createUsageStatusController } from "./status";
 
-function createStatusControllerMock() {
+function createStatusControllerMock(usageMode: "left" | "used" = "left") {
 	return {
 		refreshFor: vi.fn().mockResolvedValue(undefined),
 		openPreferencesPanel: vi.fn().mockResolvedValue(undefined),
 		loadPreferences: vi.fn().mockResolvedValue(undefined),
 		getPreferences: vi.fn(() => ({
-			usageMode: "left",
+			usageMode,
 			resetWindow: "7d",
 			showAccount: true,
 			showReset: true,
@@ -20,7 +20,24 @@ function createStatusControllerMock() {
 
 function createAccountManagerMock(emails: string[] = []) {
 	return {
-		getAccounts: () => emails.map((email) => ({ email })),
+		getAccounts: () =>
+			emails.map((email) => ({
+				email,
+				accessToken: "token",
+				refreshToken: "refresh",
+				expiresAt: Date.now() + 60_000,
+			})),
+		getAccount: (email: string) => ({
+			email,
+			accessToken: "token",
+			refreshToken: "refresh",
+			expiresAt: Date.now() + 60_000,
+		}),
+		getActiveAccount: () => undefined,
+		getManualAccount: () => undefined,
+		isPiAuthAccount: () => false,
+		getCachedUsage: () => undefined,
+		refreshUsageForAllAccounts: vi.fn().mockResolvedValue(undefined),
 	} as unknown as AccountManager;
 }
 
@@ -97,6 +114,36 @@ describe("registerCommands", () => {
 		expect(notify).toHaveBeenCalledWith(
 			"/multicodex requires a subcommand in non-interactive mode. Use /multicodex help.",
 			"warning",
+		);
+	});
+
+	it("uses footer percent mode for non-interactive account summaries", async () => {
+		const registerCommand = vi.fn();
+		const accountManager = {
+			...createAccountManagerMock(["alpha@example.com"]),
+			getCachedUsage: () => ({
+				primary: { usedPercent: 25, resetAt: undefined },
+				secondary: { usedPercent: 40, resetAt: undefined },
+			}),
+		} as unknown as AccountManager;
+		registerCommands(
+			{ registerCommand } as never,
+			accountManager,
+			createStatusControllerMock("used"),
+		);
+
+		const commandOptions = registerCommand.mock.calls[0]?.[1] as {
+			handler: (args: string, ctx: unknown) => Promise<void>;
+		};
+		const notify = vi.fn();
+		await commandOptions.handler("accounts", {
+			hasUI: false,
+			ui: { notify },
+		});
+
+		expect(notify).toHaveBeenCalledWith(
+			"alpha@example.com - 5h 25% used reset:unknown | weekly 40% used reset:unknown",
+			"info",
 		);
 	});
 });

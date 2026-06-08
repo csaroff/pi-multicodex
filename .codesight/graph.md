@@ -7,9 +7,9 @@
 - `storage.ts` — imported by **4** files
 - `auth.ts` — imported by **3** files
 - `quota.ts` — imported by **3** files
-- `status.ts` — imported by **3** files
 - `stream-wrapper.ts` — imported by **3** files
 - `commands.ts` — imported by **2** files
+- `status.ts` — imported by **2** files
 - `extension.ts` — imported by **2** files
 - `hooks.ts` — imported by **2** files
 - `provider.ts` — imported by **2** files
@@ -25,8 +25,8 @@
 - `storage.ts` ← `commands.ts`, `index.ts`, `scripts/generate-schema.ts`, `selection.ts`
 - `auth.ts` ← `account-manager.ts`, `auth.test.ts`, `index.ts`
 - `quota.ts` ← `account-manager.ts`, `index.ts`, `stream-wrapper.ts`
-- `status.ts` ← `commands.test.ts`, `commands.ts`, `extension.ts`
 - `stream-wrapper.ts` ← `index.test.ts`, `index.ts`, `provider.ts`
 - `commands.ts` ← `commands.test.ts`, `extension.ts`
+- `status.ts` ← `commands.test.ts`, `extension.ts`
 - `extension.ts` ← `extension.test.ts`, `index.ts`
 - `hooks.ts` ← `extension.ts`, `hooks.test.ts`

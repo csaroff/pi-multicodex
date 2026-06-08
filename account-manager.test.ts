@@ -31,6 +31,7 @@ vi.mock("@earendil-works/pi-ai/oauth", () => ({
 	refreshOpenAICodexToken: vi.fn(),
 }));
 
+import { refreshOpenAICodexToken } from "@earendil-works/pi-ai/oauth";
 import { AccountManager } from "./account-manager";
 
 describe("AccountManager usage warnings", () => {
@@ -149,14 +150,15 @@ describe("AccountManager ephemeral pi auth", () => {
 		expect(mocks.saveStorage).not.toHaveBeenCalled();
 	});
 
-	it("skips ephemeral when managed account has the same account id", async () => {
+	it("merges pi auth into a managed account with the same account id", async () => {
 		mocks.storageData.accounts = [
 			{
 				email: "managed@example.com",
 				accessToken: "managed-access",
-				refreshToken: "shared-refresh",
-				expiresAt: Date.now() + 3600_000,
+				refreshToken: "managed-refresh",
+				expiresAt: 100,
 				accountId: "acc-1",
+				needsReauth: true,
 			},
 		];
 		mocks.loadImportedOpenAICodexAuth.mockResolvedValue({
@@ -164,7 +166,7 @@ describe("AccountManager ephemeral pi auth", () => {
 			fingerprint: "fp",
 			credentials: {
 				access: "pi-access",
-				refresh: "shared-refresh",
+				refresh: "pi-refresh",
 				expires: Date.now() + 3600_000,
 				accountId: "acc-1",
 			},
@@ -174,17 +176,23 @@ describe("AccountManager ephemeral pi auth", () => {
 		await manager.loadPiAuth();
 
 		expect(manager.getAccounts()).toHaveLength(1);
-		expect(manager.getAccount("managed@example.com")).toBeDefined();
+		expect(manager.getAccount("managed@example.com")).toMatchObject({
+			accessToken: "pi-access",
+			refreshToken: "pi-refresh",
+			needsReauth: undefined,
+		});
 		expect(manager.getAccount("pi@example.com")).toBeUndefined();
+		expect(mocks.saveStorage).toHaveBeenCalled();
 	});
 
-	it("skips ephemeral when managed account has the same email", async () => {
+	it("merges pi auth into a managed account with the same email", async () => {
+		const now = Date.now();
 		mocks.storageData.accounts = [
 			{
 				email: "pi@example.com",
 				accessToken: "managed-access",
 				refreshToken: "managed-refresh",
-				expiresAt: Date.now() + 3600_000,
+				expiresAt: now + 600_000,
 			},
 		];
 		mocks.loadImportedOpenAICodexAuth.mockResolvedValue({
@@ -193,7 +201,7 @@ describe("AccountManager ephemeral pi auth", () => {
 			credentials: {
 				access: "pi-access",
 				refresh: "different-refresh",
-				expires: Date.now() + 3600_000,
+				expires: now + 1_200_000,
 			},
 		});
 
@@ -203,6 +211,76 @@ describe("AccountManager ephemeral pi auth", () => {
 		expect(manager.getAccounts()).toHaveLength(1);
 		const first = manager.getAccounts()[0];
 		expect(first ? manager.isPiAuthAccount(first) : true).toBe(false);
+		expect(first).toMatchObject({
+			accessToken: "pi-access",
+			refreshToken: "different-refresh",
+		});
+	});
+
+	it("does not let stale pi auth overwrite fresher managed credentials", async () => {
+		const now = Date.now();
+		mocks.storageData.accounts = [
+			{
+				email: "pi@example.com",
+				accessToken: "managed-access",
+				refreshToken: "managed-refresh",
+				expiresAt: now + 3600_000,
+				accountId: "acc-1",
+			},
+		];
+		mocks.loadImportedOpenAICodexAuth.mockResolvedValue({
+			identifier: "pi@example.com",
+			fingerprint: "fp",
+			credentials: {
+				access: "stale-pi-access",
+				refresh: "stale-pi-refresh",
+				expires: now - 60_000,
+				accountId: "acc-1",
+			},
+		});
+
+		const manager = new AccountManager();
+		await manager.loadPiAuth();
+
+		expect(manager.getAccounts()).toHaveLength(1);
+		expect(manager.getAccount("pi@example.com")).toMatchObject({
+			accessToken: "managed-access",
+			refreshToken: "managed-refresh",
+			expiresAt: now + 3600_000,
+		});
+		expect(mocks.saveStorage).not.toHaveBeenCalled();
+	});
+
+	it("does not clear needsReauth from expired imported pi auth", async () => {
+		const now = Date.now();
+		mocks.storageData.accounts = [
+			{
+				email: "pi@example.com",
+				accessToken: "managed-access",
+				refreshToken: "managed-refresh",
+				expiresAt: now - 120_000,
+				needsReauth: true,
+			},
+		];
+		mocks.loadImportedOpenAICodexAuth.mockResolvedValue({
+			identifier: "pi@example.com",
+			fingerprint: "fp",
+			credentials: {
+				access: "expired-pi-access",
+				refresh: "expired-pi-refresh",
+				expires: now - 60_000,
+			},
+		});
+
+		const manager = new AccountManager();
+		await manager.loadPiAuth();
+
+		expect(manager.getAccount("pi@example.com")).toMatchObject({
+			accessToken: "managed-access",
+			refreshToken: "managed-refresh",
+			needsReauth: true,
+		});
+		expect(mocks.saveStorage).not.toHaveBeenCalled();
 	});
 
 	it("does not persist ephemeral account when saving", async () => {
@@ -312,6 +390,93 @@ describe("AccountManager account deduplication", () => {
 		expect(manager.getAccounts()).toHaveLength(1);
 		expect(account.accessToken).toBe("new-access");
 		expect(account.refreshToken).toBe("new-refresh");
+	});
+});
+
+describe("AccountManager token refresh recovery", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mocks.storageData.accounts = [];
+		mocks.storageData.activeEmail = undefined;
+		mocks.loadImportedOpenAICodexAuth.mockResolvedValue(undefined);
+	});
+
+	it("does not mark reauth for transient refresh failures", async () => {
+		vi.mocked(refreshOpenAICodexToken).mockRejectedValue(
+			new Error("OpenAI Codex token refresh error: fetch failed"),
+		);
+		const manager = new AccountManager();
+		const account = manager.addOrUpdateAccount("transient@example.com", {
+			access: "old-access",
+			refresh: "old-refresh",
+			expires: Date.now() - 60_000,
+		});
+		mocks.saveStorage.mockClear();
+
+		await expect(manager.ensureValidToken(account)).rejects.toThrow(
+			"fetch failed",
+		);
+
+		expect(account.needsReauth).toBeUndefined();
+		expect(mocks.saveStorage).not.toHaveBeenCalled();
+	});
+
+	it("marks reauth for terminal refresh failures", async () => {
+		vi.mocked(refreshOpenAICodexToken).mockRejectedValue(
+			new Error(
+				'OpenAI Codex token refresh failed (400): {"error":"invalid_grant"}',
+			),
+		);
+		const manager = new AccountManager();
+		const account = manager.addOrUpdateAccount("terminal@example.com", {
+			access: "old-access",
+			refresh: "old-refresh",
+			expires: Date.now() - 60_000,
+		});
+		mocks.saveStorage.mockClear();
+
+		await expect(manager.ensureValidToken(account)).rejects.toThrow(
+			"invalid_grant",
+		);
+
+		expect(account.needsReauth).toBe(true);
+		expect(mocks.saveStorage).toHaveBeenCalled();
+	});
+
+	it("uses fresher stored credentials instead of a stale in-memory refresh token", async () => {
+		mocks.storageData.accounts = [
+			{
+				email: "race@example.com",
+				accessToken: "old-access",
+				refreshToken: "old-refresh",
+				expiresAt: Date.now() - 60_000,
+			},
+		];
+		vi.mocked(refreshOpenAICodexToken).mockImplementation(async () => {
+			mocks.storageData.accounts = [
+				{
+					email: "race@example.com",
+					accessToken: "fresh-access",
+					refreshToken: "fresh-refresh",
+					expiresAt: Date.now() + 3600_000,
+				},
+			];
+			throw new Error(
+				'OpenAI Codex token refresh failed (400): {"error":"invalid_grant"}',
+			);
+		});
+
+		const manager = new AccountManager();
+		const account = manager.getAccount("race@example.com");
+		expect(account).toBeDefined();
+		if (!account) return;
+
+		await expect(manager.ensureValidToken(account)).resolves.toBe(
+			"fresh-access",
+		);
+
+		expect(account.refreshToken).toBe("fresh-refresh");
+		expect(account.needsReauth).toBeUndefined();
 	});
 });
 

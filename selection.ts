@@ -56,6 +56,9 @@ export function pickBestAccount(
 	const withUsage = available.filter((account) =>
 		usageByEmail.has(account.email),
 	);
+	const withoutUsage = available.filter(
+		(account) => !usageByEmail.has(account.email),
+	);
 	const untouched = withUsage.filter((account) =>
 		isUsageUntouched(usageByEmail.get(account.email)),
 	);
@@ -65,6 +68,10 @@ export function pickBestAccount(
 			pickLowestUsageAccount(untouched, usageByEmail) ??
 			pickRandomAccount(untouched)
 		);
+	}
+
+	if (withoutUsage.length > 0) {
+		return pickRandomAccount(withoutUsage);
 	}
 
 	const lowestUsage = pickLowestUsageAccount(withUsage, usageByEmail);

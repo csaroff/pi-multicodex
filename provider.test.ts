@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -18,9 +21,13 @@ vi.mock("pi-provider-utils/providers", () => ({
 
 import type { AccountManager } from "./account-manager";
 import {
+	getOpenAICodexMirror,
 	installMulticodexProviderWrapper,
 	resetMulticodexProviderWrapperForTest,
 } from "./provider";
+
+let previousAgentDir: string | undefined;
+let agentDir: string;
 
 function makeAccountManager(onActivate?: () => void): AccountManager {
 	const account = {
@@ -77,12 +84,21 @@ async function drain(providerConfig: unknown): Promise<void> {
 
 describe("installMulticodexProviderWrapper", () => {
 	beforeEach(() => {
+		previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+		agentDir = mkdtempSync(join(tmpdir(), "pi-multicodex-test-"));
+		process.env.PI_CODING_AGENT_DIR = agentDir;
 		vi.clearAllMocks();
 		resetMulticodexProviderWrapperForTest();
 		mocks.currentProvider = undefined;
 	});
 
 	afterEach(() => {
+		if (previousAgentDir === undefined) {
+			delete process.env.PI_CODING_AGENT_DIR;
+		} else {
+			process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+		}
+		rmSync(agentDir, { recursive: true, force: true });
 		resetMulticodexProviderWrapperForTest();
 	});
 
@@ -146,5 +162,177 @@ describe("installMulticodexProviderWrapper", () => {
 		await drain(config);
 		expect(calls).toEqual(["built-in:selected-token"]);
 		expect(activateCount).toBe(1);
+	});
+});
+
+describe("getOpenAICodexMirror", () => {
+	beforeEach(() => {
+		previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+		agentDir = mkdtempSync(join(tmpdir(), "pi-multicodex-test-"));
+		process.env.PI_CODING_AGENT_DIR = agentDir;
+		vi.clearAllMocks();
+		mocks.mirrorProvider.mockReturnValue({ baseUrl: "https://codex.example" });
+	});
+
+	afterEach(() => {
+		if (previousAgentDir === undefined) {
+			delete process.env.PI_CODING_AGENT_DIR;
+		} else {
+			process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+		}
+		rmSync(agentDir, { recursive: true, force: true });
+	});
+
+	it("applies openai-codex modelOverrides from models.json", () => {
+		mocks.getModels.mockReturnValue([
+			{
+				id: "codex-test",
+				name: "Codex Test",
+				reasoning: true,
+				thinkingLevelMap: { medium: "medium", high: "high" },
+				input: ["text"],
+				cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 },
+				contextWindow: 100,
+				maxTokens: 10,
+				headers: { "x-source": "source", "x-override": "source" },
+				compat: { sendSessionIdHeader: false },
+			},
+		]);
+		writeFileSync(
+			join(agentDir, "models.json"),
+			`{
+				// Pi accepts comments in models.json.
+				"providers": {
+					"openai-codex": {
+						"modelOverrides": {
+							"codex-test": {
+								"name": "Custom Codex Test",
+								"reasoning": false,
+								"thinkingLevelMap": { "high": "custom-high", "xhigh": null, },
+								"input": ["text", "image"],
+								"cost": { "output": 20, },
+								"contextWindow": 200,
+								"maxTokens": 25,
+								"headers": { "x-override": "override", "x-added": "added", },
+								"compat": { "supportsLongCacheRetention": true, },
+							},
+						},
+					},
+				},
+			}`,
+		);
+
+		expect(getOpenAICodexMirror()).toEqual({
+			baseUrl: "https://codex.example",
+			models: [
+				{
+					id: "codex-test",
+					name: "Custom Codex Test",
+					reasoning: false,
+					thinkingLevelMap: {
+						medium: "medium",
+						high: "custom-high",
+						xhigh: null,
+					},
+					input: ["text", "image"],
+					cost: { input: 1, output: 20, cacheRead: 3, cacheWrite: 4 },
+					contextWindow: 200,
+					maxTokens: 25,
+					headers: {
+						"x-source": "source",
+						"x-override": "override",
+						"x-added": "added",
+					},
+					compat: {
+						sendSessionIdHeader: false,
+						supportsLongCacheRetention: true,
+					},
+				},
+			],
+		});
+	});
+
+	it("ignores malformed models.json and keeps mirrored models", () => {
+		mocks.getModels.mockReturnValue([
+			{
+				id: "codex-test",
+				name: "Codex Test",
+				reasoning: true,
+				input: ["text"],
+				cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 },
+				contextWindow: 100,
+				maxTokens: 10,
+			},
+		]);
+		writeFileSync(join(agentDir, "models.json"), "{not json");
+
+		expect(getOpenAICodexMirror().models).toEqual([
+			{
+				id: "codex-test",
+				name: "Codex Test",
+				reasoning: true,
+				thinkingLevelMap: undefined,
+				input: ["text"],
+				cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 },
+				contextWindow: 100,
+				maxTokens: 10,
+			},
+		]);
+	});
+
+	it("ignores invalid modelOverride field shapes and keeps mirrored defaults", () => {
+		mocks.getModels.mockReturnValue([
+			{
+				id: "codex-test",
+				name: "Codex Test",
+				reasoning: true,
+				input: ["text"],
+				cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 },
+				contextWindow: 100,
+				maxTokens: 10,
+				headers: { "x-source": "source" },
+				compat: { sendSessionIdHeader: false },
+			},
+		]);
+		writeFileSync(
+			join(agentDir, "models.json"),
+			JSON.stringify({
+				providers: {
+					"openai-codex": {
+						modelOverrides: {
+							"codex-test": {
+								name: 123,
+								reasoning: "false",
+								thinkingLevelMap: [],
+								input: {},
+								cost: [],
+								contextWindow: "200",
+								maxTokens: null,
+								headers: [],
+								compat: {
+									sendSessionIdHeader: "false",
+									supportsLongCacheRetention: "true",
+								},
+							},
+						},
+					},
+				},
+			}),
+		);
+
+		expect(getOpenAICodexMirror().models).toEqual([
+			{
+				id: "codex-test",
+				name: "Codex Test",
+				reasoning: true,
+				thinkingLevelMap: undefined,
+				input: ["text"],
+				cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 },
+				contextWindow: 100,
+				maxTokens: 10,
+				headers: { "x-source": "source" },
+				compat: { sendSessionIdHeader: false },
+			},
+		]);
 	});
 });

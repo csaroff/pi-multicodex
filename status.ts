@@ -17,7 +17,7 @@ import {
 } from "pi-provider-utils/agent-paths";
 import type { AccountManager } from "./account-manager";
 import { PROVIDER_ID } from "./provider";
-import type { CodexUsageSnapshot } from "./usage";
+import { type CodexUsageSnapshot, formatResetAt } from "./usage";
 
 const STATUS_KEY = "multicodex-usage";
 const ACCOUNT_STATUS_KEYS = [
@@ -186,6 +186,21 @@ function formatPercent(
 	}
 
 	return `${Math.round(clampPercent(displayPercent))}% ${mode}`;
+}
+
+export function formatUsageSummaryText(
+	usage: CodexUsageSnapshot | undefined,
+	mode: PercentDisplayMode = "left",
+): string {
+	const primaryDisplay = usedToDisplayPercent(
+		usage?.primary?.usedPercent,
+		mode,
+	);
+	const secondaryDisplay = usedToDisplayPercent(
+		usage?.secondary?.usedPercent,
+		mode,
+	);
+	return `5h ${formatPercent(primaryDisplay, mode)} reset:${formatResetAt(usage?.primary?.resetAt)} | weekly ${formatPercent(secondaryDisplay, mode)} reset:${formatResetAt(usage?.secondary?.resetAt)}`;
 }
 
 function formatUsageBar(

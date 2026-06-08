@@ -9,7 +9,6 @@ async function refreshAndActivateBestAccount(
 	accountManager.beginInitialization();
 	try {
 		await accountManager.loadPiAuth();
-		await accountManager.refreshUsageForAllAccounts({ force: true });
 
 		const needsReauth = accountManager.getAccountsNeedingReauth();
 		if (needsReauth.length > 0) {
@@ -25,11 +24,19 @@ async function refreshAndActivateBestAccount(
 		}
 
 		const manual = accountManager.getAvailableManualAccount();
-		if (manual) return;
+		if (manual) {
+			await accountManager.refreshUsageForAccount(manual);
+			return;
+		}
 		if (accountManager.hasManualAccount()) {
 			accountManager.clearManualAccount();
 		}
-		await accountManager.activateBestAccount();
+		const selected = await accountManager.activateBestAccount({
+			refreshUsage: false,
+		});
+		if (selected) {
+			await accountManager.refreshUsageForAccount(selected);
+		}
 	} finally {
 		accountManager.markReady();
 	}

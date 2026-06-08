@@ -18,6 +18,7 @@ import { fetchCodexUsage } from "./usage-client";
 const USAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 const USAGE_REQUEST_TIMEOUT_MS = 10 * 1000;
 const QUOTA_COOLDOWN_MS = 60 * 60 * 1000;
+const TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000;
 
 type WarningHandler = (message: string) => void;
 type StateChangeHandler = () => void;
@@ -25,6 +26,19 @@ type StateChangeHandler = () => void;
 function isAbortError(error: unknown): boolean {
 	if (!(error instanceof Error)) return false;
 	return error.name === "AbortError" || /\babort(?:ed)?\b/i.test(error.message);
+}
+
+function isTerminalTokenRefreshError(error: unknown): boolean {
+	const message = normalizeUnknownError(error);
+	if (/OpenAI Codex token refresh failed \((?:5\d\d|429)\)/i.test(message)) {
+		return false;
+	}
+	return (
+		/\binvalid_grant\b/i.test(message) ||
+		/\binvalid_refresh_token\b/i.test(message) ||
+		/\brefresh token\b.*\b(?:expired|invalid|revoked|used)\b/i.test(message) ||
+		/OpenAI Codex token refresh failed \((?:400|401|403)\)/i.test(message)
+	);
 }
 
 export class AccountManager {
@@ -65,6 +79,29 @@ export class AccountManager {
 	}
 
 	private save(): void {
+		saveStorage(this.data);
+	}
+
+	private saveManagedAccount(account: Account): void {
+		if (this.isPiAuthAccount(account)) return;
+
+		const latest = loadStorage();
+		const accountId = account.accountId;
+		const index = latest.accounts.findIndex(
+			(candidate) =>
+				candidate.email === account.email ||
+				(Boolean(accountId) && candidate.accountId === accountId),
+		);
+		if (index >= 0) {
+			latest.accounts[index] = account;
+		} else {
+			latest.accounts.push(account);
+		}
+		latest.activeEmail =
+			this.piAuthAccount?.email === this.data.activeEmail
+				? latest.activeEmail
+				: this.data.activeEmail;
+		this.data = latest;
 		saveStorage(this.data);
 	}
 
@@ -168,6 +205,125 @@ export class AccountManager {
 		return changed;
 	}
 
+	private tokenIsFresh(account: Account): boolean {
+		return Date.now() < account.expiresAt - TOKEN_REFRESH_SKEW_MS;
+	}
+
+	private credentialsAreFresh(creds: OAuthCredentials): boolean {
+		return Date.now() < creds.expires - TOKEN_REFRESH_SKEW_MS;
+	}
+
+	private shouldMergeImportedCredentials(
+		account: Account,
+		creds: OAuthCredentials,
+	): boolean {
+		if (!this.credentialsAreFresh(creds)) return false;
+		return creds.expires > account.expiresAt || Boolean(account.needsReauth);
+	}
+
+	private findManagedAccountForImported(
+		imported: Awaited<ReturnType<typeof loadImportedOpenAICodexAuth>>,
+	): Account | undefined {
+		if (!imported) return undefined;
+		const importedAccountId =
+			typeof imported.credentials.accountId === "string"
+				? imported.credentials.accountId
+				: undefined;
+		return this.data.accounts.find(
+			(a) =>
+				a.email === imported.identifier ||
+				(Boolean(importedAccountId) && a.accountId === importedAccountId),
+		);
+	}
+
+	private mergeImportedAuthIntoManaged(
+		imported: Awaited<ReturnType<typeof loadImportedOpenAICodexAuth>>,
+	): Account | undefined {
+		const account = this.findManagedAccountForImported(imported);
+		if (!account || !imported) return undefined;
+
+		const changed = this.shouldMergeImportedCredentials(
+			account,
+			imported.credentials,
+		)
+			? this.applyCredentials(account, imported.credentials)
+			: false;
+		if (changed) {
+			this.saveManagedAccount(account);
+			this.notifyStateChanged();
+		}
+		return account;
+	}
+
+	private reloadManagedAccountFromStorage(account: Account): boolean {
+		if (this.isPiAuthAccount(account)) return false;
+		const latest = loadStorage();
+		const accountId = account.accountId;
+		const stored = latest.accounts.find(
+			(candidate) =>
+				candidate.email === account.email ||
+				(Boolean(accountId) && candidate.accountId === accountId),
+		);
+		if (!stored) return false;
+
+		const hasFresherCredentials =
+			stored.expiresAt > account.expiresAt ||
+			(stored.expiresAt >= account.expiresAt &&
+				(stored.accessToken !== account.accessToken ||
+					stored.refreshToken !== account.refreshToken));
+		const hasRecoveredReauth =
+			account.needsReauth && !stored.needsReauth && this.tokenIsFresh(stored);
+		if (!hasFresherCredentials && !hasRecoveredReauth) return false;
+
+		let changed = this.applyCredentials(account, {
+			access: stored.accessToken,
+			refresh: stored.refreshToken,
+			expires: stored.expiresAt,
+			accountId: stored.accountId,
+		});
+		if (account.lastUsed !== stored.lastUsed) {
+			account.lastUsed = stored.lastUsed;
+			changed = true;
+		}
+		if (account.quotaExhaustedUntil !== stored.quotaExhaustedUntil) {
+			account.quotaExhaustedUntil = stored.quotaExhaustedUntil;
+			changed = true;
+		}
+		if (changed) {
+			this.notifyStateChanged();
+		}
+		return changed;
+	}
+
+	private async mergePiAuthForManagedAccount(
+		account: Account,
+	): Promise<boolean> {
+		if (this.isPiAuthAccount(account)) return false;
+		const imported = await loadImportedOpenAICodexAuth();
+		const importedAccountId =
+			typeof imported?.credentials.accountId === "string"
+				? imported.credentials.accountId
+				: undefined;
+		if (
+			!imported ||
+			(account.email !== imported.identifier &&
+				(!importedAccountId || account.accountId !== importedAccountId))
+		) {
+			return false;
+		}
+
+		if (!this.shouldMergeImportedCredentials(account, imported.credentials)) {
+			return false;
+		}
+
+		const changed = this.applyCredentials(account, imported.credentials);
+		if (changed) {
+			this.saveManagedAccount(account);
+			this.notifyStateChanged();
+		}
+		return changed;
+	}
+
 	addOrUpdateAccount(email: string, creds: OAuthCredentials): Account {
 		const existing = this.data.accounts.find((a) => a.email === email);
 		if (existing) {
@@ -255,7 +411,9 @@ export class AccountManager {
 	/**
 	 * Read pi's openai-codex auth from auth.json and expose it as a
 	 * memory-only ephemeral account. Never persists to codex-accounts.json.
-	 * If the identity already exists as a managed account, skip it.
+	 * If the identity already exists as a managed account, merge the fresh
+	 * pi credentials into the managed record instead of creating an ephemeral
+	 * duplicate.
 	 */
 	async loadPiAuth(): Promise<void> {
 		const imported = await loadImportedOpenAICodexAuth();
@@ -265,21 +423,16 @@ export class AccountManager {
 			return;
 		}
 
+		const managed = this.mergeImportedAuthIntoManaged(imported);
+		if (managed) {
+			this.piAuthAccount = undefined;
+			return;
+		}
+
 		const importedAccountId =
 			typeof imported.credentials.accountId === "string"
 				? imported.credentials.accountId
 				: undefined;
-		const alreadyManaged = this.data.accounts.find(
-			(a) =>
-				a.email === imported.identifier ||
-				(Boolean(importedAccountId) && a.accountId === importedAccountId),
-		);
-
-		if (alreadyManaged) {
-			this.piAuthAccount = undefined;
-			this.notifyStateChanged();
-			return;
-		}
 
 		this.piAuthAccount = {
 			email: imported.identifier,
@@ -308,7 +461,7 @@ export class AccountManager {
 		if (account) {
 			account.quotaExhaustedUntil = until;
 			if (!this.isPiAuthAccount(account)) {
-				this.save();
+				this.saveManagedAccount(account);
 			}
 			this.notifyStateChanged();
 		}
@@ -354,9 +507,15 @@ export class AccountManager {
 	}
 
 	private markNeedsReauth(account: Account): void {
+		if (
+			this.reloadManagedAccountFromStorage(account) &&
+			this.tokenIsFresh(account)
+		) {
+			return;
+		}
 		account.needsReauth = true;
 		if (!this.isPiAuthAccount(account)) {
-			this.save();
+			this.saveManagedAccount(account);
 		}
 		this.notifyStateChanged();
 	}
@@ -429,11 +588,14 @@ export class AccountManager {
 	async activateBestAccount(options?: {
 		excludeEmails?: Set<string>;
 		signal?: AbortSignal;
+		refreshUsage?: boolean;
 	}): Promise<Account | undefined> {
 		const now = Date.now();
 		this.clearExpiredExhaustion(now);
 		const accounts = this.getAccounts();
-		await this.refreshUsageIfStale(accounts, options);
+		if (options?.refreshUsage !== false) {
+			await this.refreshUsageIfStale(accounts, options);
+		}
 
 		const selected = pickBestAccount(accounts, this.usageCache, {
 			excludeEmails: options?.excludeEmails,
@@ -492,6 +654,11 @@ export class AccountManager {
 
 	async ensureValidToken(account: Account): Promise<string> {
 		if (account.needsReauth) {
+			await this.mergePiAuthForManagedAccount(account);
+			this.reloadManagedAccountFromStorage(account);
+			if (!account.needsReauth && this.tokenIsFresh(account)) {
+				return account.accessToken;
+			}
 			const hint = this.isPiAuthAccount(account)
 				? "/login openai-codex"
 				: `/multicodex use ${account.email}`;
@@ -500,12 +667,18 @@ export class AccountManager {
 			);
 		}
 
-		if (Date.now() < account.expiresAt - 5 * 60 * 1000) {
+		if (this.tokenIsFresh(account)) {
 			return account.accessToken;
 		}
 
 		if (this.isPiAuthAccount(account)) {
 			return this.ensureValidTokenForPiAuth(account);
+		}
+
+		await this.mergePiAuthForManagedAccount(account);
+		this.reloadManagedAccountFromStorage(account);
+		if (this.tokenIsFresh(account)) {
+			return account.accessToken;
 		}
 
 		const inflight = this.refreshPromises.get(account.email);
@@ -524,11 +697,18 @@ export class AccountManager {
 				if (accountId) {
 					account.accountId = accountId;
 				}
-				this.save();
+				this.saveManagedAccount(account);
 				this.notifyStateChanged();
 				return account.accessToken;
 			} catch (error) {
-				this.markNeedsReauth(account);
+				await this.mergePiAuthForManagedAccount(account);
+				this.reloadManagedAccountFromStorage(account);
+				if (this.tokenIsFresh(account)) {
+					return account.accessToken;
+				}
+				if (isTerminalTokenRefreshError(error)) {
+					this.markNeedsReauth(account);
+				}
 				throw error;
 			} finally {
 				this.refreshPromises.delete(account.email);

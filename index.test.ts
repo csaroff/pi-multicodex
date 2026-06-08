@@ -1,5 +1,8 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getModels } from "@earendil-works/pi-ai";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	type Account,
 	type AccountManager,
@@ -16,7 +19,22 @@ import {
 } from "./index";
 import { setCloseCodexWebSocketSessionsForTest } from "./stream-wrapper";
 
+let previousAgentDir: string | undefined;
+let agentDir: string;
+
+beforeEach(() => {
+	previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+	agentDir = mkdtempSync(join(tmpdir(), "pi-multicodex-test-"));
+	process.env.PI_CODING_AGENT_DIR = agentDir;
+});
+
 afterEach(() => {
+	if (previousAgentDir === undefined) {
+		delete process.env.PI_CODING_AGENT_DIR;
+	} else {
+		process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+	}
+	rmSync(agentDir, { recursive: true, force: true });
 	setCloseCodexWebSocketSessionsForTest(undefined);
 });
 
@@ -310,6 +328,23 @@ describe("pickBestAccount", () => {
 		const accounts = [makeAccount("a"), makeAccount("b")];
 		const selected = pickBestAccount(accounts, new Map(), { now: 0 });
 		expect(["a", "b"]).toContain(selected?.email);
+	});
+
+	it("tries accounts with unknown usage before reusing a touched known account", () => {
+		const accounts = [makeAccount("known"), makeAccount("unknown")];
+		const usage = new Map([
+			[
+				"known",
+				{
+					primary: { usedPercent: 25, resetAt: 5000 },
+					secondary: { usedPercent: 25, resetAt: 6000 },
+					fetchedAt: 0,
+				},
+			],
+		]);
+
+		const selected = pickBestAccount(accounts, usage, { now: 0 });
+		expect(selected?.email).toBe("unknown");
 	});
 
 	it("ignores exhausted accounts", () => {

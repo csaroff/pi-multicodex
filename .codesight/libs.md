@@ -28,11 +28,11 @@
 - `status.ts`
   - function loadFooterPreferences: () => Promise<FooterPreferences>
   - function persistFooterPreferences: (preferences) => Promise<void>
+  - function formatUsageSummaryText: (usage, mode) => string
   - function isManagedModel: (model) => boolean
   - function formatActiveAccountStatus: (ctx, accountEmail, usage, preferences) => string
   - function createUsageStatusController: (accountManager) => void
-  - interface FooterPreferences
-  - _...3 more_
+  - _...4 more_
 - `storage.ts`
   - function loadStorage: () => StorageData
   - function saveStorage: (data) => void
