@@ -17,8 +17,7 @@ import type { AccountManager } from "./account-manager";
 import { isQuotaErrorMessage } from "./quota";
 
 const MAX_ROTATION_RETRIES = 5;
-const OPENAI_CODEX_RESPONSES_PROVIDER_PATH =
-	"./providers/openai-codex-responses.js";
+const OPENAI_CODEX_RESPONSES_PROVIDER_PATH = "./api/openai-codex-responses.js";
 
 type CloseCodexWebSocketSessions = (sessionId?: string) => void | Promise<void>;
 type OpenAICodexResponsesModule = {

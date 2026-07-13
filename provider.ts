@@ -4,12 +4,11 @@ import {
 	type Api,
 	type AssistantMessageEventStream,
 	type Context,
-	getApiProvider,
-	getModels,
 	type Model,
 	type SimpleStreamOptions,
 	type ThinkingLevelMap,
 } from "@earendil-works/pi-ai";
+import { getApiProvider, getModels } from "@earendil-works/pi-ai/compat";
 import {
 	type ExtensionAPI,
 	getAgentDir,

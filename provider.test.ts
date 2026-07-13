@@ -9,8 +9,8 @@ const mocks = vi.hoisted(() => ({
 	mirrorProvider: vi.fn(() => ({ baseUrl: "https://codex.example" })),
 }));
 
-vi.mock("@earendil-works/pi-ai", async (importOriginal) => ({
-	...(await importOriginal<typeof import("@earendil-works/pi-ai")>()),
+vi.mock("@earendil-works/pi-ai/compat", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@earendil-works/pi-ai/compat")>()),
 	getApiProvider: () => mocks.currentProvider,
 	getModels: mocks.getModels,
 }));
