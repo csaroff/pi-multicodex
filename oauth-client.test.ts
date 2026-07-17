@@ -26,7 +26,10 @@ it("logs in through the public Codex provider OAuth API", async () => {
 		expires: 123,
 	};
 	mocks.login.mockResolvedValue(credential);
-	const interaction = { notify: vi.fn(), prompt: vi.fn() };
+	const interaction = {
+		notify: vi.fn(),
+		prompt: vi.fn().mockResolvedValue("device_code"),
+	};
 
 	await expect(loginOAuthToken(interaction)).resolves.toBe(credential);
 	expect(mocks.login).toHaveBeenCalledWith(interaction);

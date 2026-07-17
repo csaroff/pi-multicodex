@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AccountManager } from "./account-manager";
+import { openLoginInBrowser } from "./browser";
 import { registerCommands } from "./commands";
+import { loginOAuthToken } from "./oauth-client";
 import type { createUsageStatusController } from "./status";
+
+vi.mock("./browser", () => ({ openLoginInBrowser: vi.fn() }));
+vi.mock("./oauth-client", () => ({ loginOAuthToken: vi.fn() }));
 
 function createStatusControllerMock(usageMode: "left" | "used" = "left") {
 	return {
@@ -143,6 +148,59 @@ describe("registerCommands", () => {
 
 		expect(notify).toHaveBeenCalledWith(
 			"alpha@example.com - 5h 25% used reset:unknown | weekly 40% used reset:unknown",
+			"info",
+		);
+	});
+
+	it("uses device-code login and opens its verification URL", async () => {
+		let selectedMethod: string | undefined;
+		vi.mocked(loginOAuthToken).mockImplementation(async (interaction) => {
+			selectedMethod = await interaction.prompt({
+				type: "select",
+				message: "Select login method",
+				options: [
+					{ id: "browser", label: "Browser" },
+					{ id: "device_code", label: "Device code" },
+				],
+			});
+			interaction.notify({
+				type: "device_code",
+				verificationUri: "https://auth.example/device",
+				userCode: "ABCD-EFGH",
+				intervalSeconds: 5,
+				expiresInSeconds: 900,
+			});
+			return { access: "access", refresh: "refresh", expires: 123 };
+		});
+		const registerCommand = vi.fn();
+		const accountManager = {
+			...createAccountManagerMock(["business@example.com"]),
+			addOrUpdateAccount: vi.fn(() => ({ email: "business@example.com" })),
+			setManualAccount: vi.fn(),
+		} as unknown as AccountManager;
+		registerCommands(
+			{ registerCommand } as never,
+			accountManager,
+			createStatusControllerMock(),
+		);
+		const commandOptions = registerCommand.mock.calls[0]?.[1] as {
+			handler: (args: string, ctx: unknown) => Promise<void>;
+		};
+		const notify = vi.fn();
+
+		await commandOptions.handler("reauth business@example.com", {
+			hasUI: true,
+			ui: { notify, input: vi.fn() },
+		});
+
+		expect(selectedMethod).toBe("device_code");
+		expect(openLoginInBrowser).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.anything(),
+			"https://auth.example/device",
+		);
+		expect(notify).toHaveBeenCalledWith(
+			"Open https://auth.example/device and enter code ABCD-EFGH",
 			"info",
 		);
 	});

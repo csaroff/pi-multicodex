@@ -226,20 +226,34 @@ async function loginAndActivateAccount(
 	identifier: string,
 ): Promise<string | undefined> {
 	try {
-		ctx.ui.notify(
-			`Starting login for ${identifier}... Check your browser.`,
-			"info",
-		);
+		ctx.ui.notify(`Starting device login for ${identifier}...`, "info");
 
 		const creds = await loginOAuthToken({
 			notify: (event) => {
-				if (event.type !== "auth_url") return;
-				void openLoginInBrowser(pi, ctx, event.url);
-				ctx.ui.notify(`Please open this URL to login: ${event.url}`, "info");
-				console.log(`[multicodex] Login URL: ${event.url}`);
+				if (event.type === "auth_url") {
+					void openLoginInBrowser(pi, ctx, event.url);
+					ctx.ui.notify(`Please open this URL to login: ${event.url}`, "info");
+					console.log(`[multicodex] Login URL: ${event.url}`);
+				}
+				if (event.type === "device_code") {
+					void openLoginInBrowser(pi, ctx, event.verificationUri);
+					ctx.ui.notify(
+						`Open ${event.verificationUri} and enter code ${event.userCode}`,
+						"info",
+					);
+					console.log(
+						`[multicodex] Device login: ${event.verificationUri} — code ${event.userCode}`,
+					);
+				}
 			},
 			prompt: async (prompt) => {
-				if (prompt.type === "select") return prompt.options[0]?.id ?? "";
+				if (prompt.type === "select") {
+					return (
+						prompt.options.find((option) => option.id === "device_code")?.id ??
+						prompt.options[0]?.id ??
+						""
+					);
+				}
 				return (await ctx.ui.input(prompt.message)) || "";
 			},
 		});
