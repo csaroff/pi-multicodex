@@ -10,7 +10,7 @@ import { AccountManager } from "./account-manager";
 
 // Mock the oauth module before anything imports it.
 vi.mock("@earendil-works/pi-ai/oauth", () => ({
-	refreshOpenAICodexToken: vi.fn(),
+	refreshOAuthToken: vi.fn(),
 }));
 
 // Mock storage so no disk I/O.
@@ -27,7 +27,7 @@ vi.mock("./auth", () => ({
 	loadImportedOpenAICodexAuth: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { refreshOpenAICodexToken } from "@earendil-works/pi-ai/oauth";
+import { refreshOAuthToken } from "@earendil-works/pi-ai/oauth";
 
 describe("AccountManager.ensureValidToken — concurrent refresh deduplication", () => {
 	let manager: AccountManager;
@@ -52,7 +52,7 @@ describe("AccountManager.ensureValidToken — concurrent refresh deduplication",
 		});
 
 		let callCount = 0;
-		vi.mocked(refreshOpenAICodexToken).mockImplementation(async () => {
+		vi.mocked(refreshOAuthToken).mockImplementation(async () => {
 			callCount++;
 			await refreshBarrier; // hold until we release
 			return {
@@ -80,8 +80,12 @@ describe("AccountManager.ensureValidToken — concurrent refresh deduplication",
 
 		// Critical: the underlying refresh was called exactly ONCE, not twice.
 		expect(callCount).toBe(1);
-		expect(refreshOpenAICodexToken).toHaveBeenCalledTimes(1);
-		expect(refreshOpenAICodexToken).toHaveBeenCalledWith("the-refresh-token");
+		expect(refreshOAuthToken).toHaveBeenCalledTimes(1);
+		expect(refreshOAuthToken).toHaveBeenCalledWith("openai-codex", {
+			access: "old-access",
+			refresh: "the-refresh-token",
+			expires: expect.any(Number),
+		});
 	});
 
 	it("does not refresh when token is still valid", async () => {
@@ -95,7 +99,7 @@ describe("AccountManager.ensureValidToken — concurrent refresh deduplication",
 		const token = await manager.ensureValidToken(validAccount as never);
 
 		expect(token).toBe("valid-access");
-		expect(refreshOpenAICodexToken).not.toHaveBeenCalled();
+		expect(refreshOAuthToken).not.toHaveBeenCalled();
 	});
 
 	it("allows independent refreshes for different accounts", async () => {
@@ -106,9 +110,9 @@ describe("AccountManager.ensureValidToken — concurrent refresh deduplication",
 			expiresAt: Date.now() - 60_000,
 		});
 
-		vi.mocked(refreshOpenAICodexToken).mockImplementation(async (rt) => ({
-			access: `new-${rt}`,
-			refresh: `refreshed-${rt}`,
+		vi.mocked(refreshOAuthToken).mockImplementation(async (_, credentials) => ({
+			access: `new-${credentials.refresh}`,
+			refresh: `refreshed-${credentials.refresh}`,
 			expires: Date.now() + 3_600_000,
 		}));
 
@@ -123,6 +127,6 @@ describe("AccountManager.ensureValidToken — concurrent refresh deduplication",
 		expect(ta).toBe("new-rt-a");
 		expect(tb).toBe("new-rt-b");
 		// Two separate accounts → two separate refresh calls.
-		expect(refreshOpenAICodexToken).toHaveBeenCalledTimes(2);
+		expect(refreshOAuthToken).toHaveBeenCalledTimes(2);
 	});
 });

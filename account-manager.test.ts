@@ -28,10 +28,10 @@ vi.mock("./usage-client", () => ({
 }));
 
 vi.mock("@earendil-works/pi-ai/oauth", () => ({
-	refreshOpenAICodexToken: vi.fn(),
+	refreshOAuthToken: vi.fn(),
 }));
 
-import { refreshOpenAICodexToken } from "@earendil-works/pi-ai/oauth";
+import { refreshOAuthToken } from "@earendil-works/pi-ai/oauth";
 import { AccountManager } from "./account-manager";
 
 describe("AccountManager usage warnings", () => {
@@ -402,7 +402,7 @@ describe("AccountManager token refresh recovery", () => {
 	});
 
 	it("does not mark reauth for transient refresh failures", async () => {
-		vi.mocked(refreshOpenAICodexToken).mockRejectedValue(
+		vi.mocked(refreshOAuthToken).mockRejectedValue(
 			new Error("OpenAI Codex token refresh error: fetch failed"),
 		);
 		const manager = new AccountManager();
@@ -422,7 +422,7 @@ describe("AccountManager token refresh recovery", () => {
 	});
 
 	it("marks reauth for terminal refresh failures", async () => {
-		vi.mocked(refreshOpenAICodexToken).mockRejectedValue(
+		vi.mocked(refreshOAuthToken).mockRejectedValue(
 			new Error(
 				'OpenAI Codex token refresh failed (400): {"error":"invalid_grant"}',
 			),
@@ -452,7 +452,7 @@ describe("AccountManager token refresh recovery", () => {
 				expiresAt: Date.now() - 60_000,
 			},
 		];
-		vi.mocked(refreshOpenAICodexToken).mockImplementation(async () => {
+		vi.mocked(refreshOAuthToken).mockImplementation(async () => {
 			mocks.storageData.accounts = [
 				{
 					email: "race@example.com",
