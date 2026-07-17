@@ -5,10 +5,13 @@ const mocks = vi.hoisted(() => ({
 	refresh: vi.fn(),
 }));
 
-vi.mock("@earendil-works/pi-ai/providers/openai-codex", () => ({
-	openaiCodexProvider: () => ({
-		auth: { oauth: { login: mocks.login, refresh: mocks.refresh } },
-	}),
+vi.mock("@earendil-works/pi-ai/providers/all", () => ({
+	builtinProviders: () => [
+		{
+			id: "openai-codex",
+			auth: { oauth: { login: mocks.login, refresh: mocks.refresh } },
+		},
+	],
 }));
 
 import { loginOAuthToken, refreshOAuthToken } from "./oauth-client";
