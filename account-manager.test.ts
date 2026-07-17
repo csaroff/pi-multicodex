@@ -27,12 +27,12 @@ vi.mock("./usage-client", () => ({
 	fetchCodexUsage: mocks.fetchCodexUsage,
 }));
 
-vi.mock("@earendil-works/pi-ai/oauth", () => ({
+vi.mock("./oauth-client", () => ({
 	refreshOAuthToken: vi.fn(),
 }));
 
-import { refreshOAuthToken } from "@earendil-works/pi-ai/oauth";
 import { AccountManager } from "./account-manager";
+import { refreshOAuthToken } from "./oauth-client";
 
 describe("AccountManager usage warnings", () => {
 	beforeEach(() => {

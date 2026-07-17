@@ -8,8 +8,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountManager } from "./account-manager";
 
-// Mock the oauth module before anything imports it.
-vi.mock("@earendil-works/pi-ai/oauth", () => ({
+// Mock token refresh before anything imports it.
+vi.mock("./oauth-client", () => ({
 	refreshOAuthToken: vi.fn(),
 }));
 
@@ -27,7 +27,7 @@ vi.mock("./auth", () => ({
 	loadImportedOpenAICodexAuth: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { refreshOAuthToken } from "@earendil-works/pi-ai/oauth";
+import { refreshOAuthToken } from "./oauth-client";
 
 describe("AccountManager.ensureValidToken — concurrent refresh deduplication", () => {
 	let manager: AccountManager;
@@ -81,11 +81,7 @@ describe("AccountManager.ensureValidToken — concurrent refresh deduplication",
 		// Critical: the underlying refresh was called exactly ONCE, not twice.
 		expect(callCount).toBe(1);
 		expect(refreshOAuthToken).toHaveBeenCalledTimes(1);
-		expect(refreshOAuthToken).toHaveBeenCalledWith("openai-codex", {
-			access: "old-access",
-			refresh: "the-refresh-token",
-			expires: expect.any(Number),
-		});
+		expect(refreshOAuthToken).toHaveBeenCalledWith("the-refresh-token");
 	});
 
 	it("does not refresh when token is still valid", async () => {
@@ -110,9 +106,9 @@ describe("AccountManager.ensureValidToken — concurrent refresh deduplication",
 			expiresAt: Date.now() - 60_000,
 		});
 
-		vi.mocked(refreshOAuthToken).mockImplementation(async (_, credentials) => ({
-			access: `new-${credentials.refresh}`,
-			refresh: `refreshed-${credentials.refresh}`,
+		vi.mocked(refreshOAuthToken).mockImplementation(async (refreshToken) => ({
+			access: `new-${refreshToken}`,
+			refresh: `refreshed-${refreshToken}`,
 			expires: Date.now() + 3_600_000,
 		}));
 

@@ -1,9 +1,7 @@
-import {
-	type OAuthCredentials,
-	refreshOAuthToken,
-} from "@earendil-works/pi-ai/oauth";
+import type { OAuthCredentials } from "@earendil-works/pi-ai/oauth";
 import { normalizeUnknownError } from "pi-provider-utils/streams";
 import { loadImportedOpenAICodexAuth } from "./auth";
+import { refreshOAuthToken } from "./oauth-client";
 import { extractQuotaResetAt } from "./quota";
 import { isAccountAvailable, pickBestAccount } from "./selection";
 import {
@@ -688,11 +686,7 @@ export class AccountManager {
 
 		const promise = (async () => {
 			try {
-				const result = await refreshOAuthToken("openai-codex", {
-					access: account.accessToken,
-					refresh: account.refreshToken,
-					expires: account.expiresAt,
-				});
+				const result = await refreshOAuthToken(account.refreshToken);
 				account.accessToken = result.access;
 				account.refreshToken = result.refresh;
 				account.expiresAt = result.expires;
