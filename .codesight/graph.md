@@ -3,6 +3,7 @@
 ## Most Imported Files (change these carefully)
 
 - `account-manager.ts` — imported by **11** files
+- `oauth-client.ts` — imported by **5** files
 - `usage.ts` — imported by **5** files
 - `storage.ts` — imported by **4** files
 - `auth.ts` — imported by **3** files
@@ -21,6 +22,7 @@
 ## Import Map (who imports what)
 
 - `account-manager.ts` ← `account-manager.test.ts`, `commands.test.ts`, `commands.ts`, `extension.ts`, `hooks.ts` +6 more
+- `oauth-client.ts` ← `account-manager.test.ts`, `account-manager.ts`, `commands.ts`, `oauth-client.test.ts`, `refresh-race.test.ts`
 - `usage.ts` ← `account-manager.ts`, `commands.ts`, `index.ts`, `status.ts`, `usage-client.ts`
 - `storage.ts` ← `commands.ts`, `index.ts`, `scripts/generate-schema.ts`, `selection.ts`
 - `auth.ts` ← `account-manager.ts`, `auth.test.ts`, `index.ts`
@@ -29,4 +31,3 @@
 - `commands.ts` ← `commands.test.ts`, `extension.ts`
 - `status.ts` ← `commands.test.ts`, `extension.ts`
 - `extension.ts` ← `extension.test.ts`, `index.ts`
-- `hooks.ts` ← `extension.ts`, `hooks.test.ts`

@@ -1,6 +1,5 @@
 import { promises as fs, constants as fsConstants } from "node:fs";
 import path from "node:path";
-import { loginOpenAICodex } from "@earendil-works/pi-ai/oauth";
 import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
@@ -19,6 +18,7 @@ import { getAgentSettingsPath } from "pi-provider-utils/agent-paths";
 import { normalizeUnknownError } from "pi-provider-utils/streams";
 import type { AccountManager } from "./account-manager";
 import { openLoginInBrowser } from "./browser";
+import { loginOAuthToken } from "./oauth-client";
 import {
 	type createUsageStatusController,
 	formatUsageSummaryText,
@@ -231,13 +231,17 @@ async function loginAndActivateAccount(
 			"info",
 		);
 
-		const creds = await loginOpenAICodex({
-			onAuth: ({ url }) => {
-				void openLoginInBrowser(pi, ctx, url);
-				ctx.ui.notify(`Please open this URL to login: ${url}`, "info");
-				console.log(`[multicodex] Login URL: ${url}`);
+		const creds = await loginOAuthToken({
+			notify: (event) => {
+				if (event.type !== "auth_url") return;
+				void openLoginInBrowser(pi, ctx, event.url);
+				ctx.ui.notify(`Please open this URL to login: ${event.url}`, "info");
+				console.log(`[multicodex] Login URL: ${event.url}`);
 			},
-			onPrompt: async ({ message }) => (await ctx.ui.input(message)) || "",
+			prompt: async (prompt) => {
+				if (prompt.type === "select") return prompt.options[0]?.id ?? "";
+				return (await ctx.ui.input(prompt.message)) || "";
+			},
 		});
 
 		const account = accountManager.addOrUpdateAccount(identifier, creds);

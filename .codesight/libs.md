@@ -8,6 +8,7 @@
 - `browser.ts` — function openLoginInBrowser: (pi, ctx, url) => Promise<void>
 - `commands.ts` — function registerCommands: (pi, accountManager, statusController) => void
 - `hooks.ts` — function handleSessionStart: (accountManager, warningHandler?) => void, function handleNewSessionSwitch: (accountManager, warningHandler?) => void
+- `oauth-client.ts` — function loginOAuthToken: (interaction) => Promise<OAuthCredentials>, function refreshOAuthToken: (refreshToken) => Promise<OAuthCredentials>
 - `provider.ts`
   - function getOpenAICodexMirror: () => void
   - function buildMulticodexProviderConfig: (accountManager, baseProvider) => void

@@ -2,9 +2,9 @@
 
 > **Stack:** raw-http | none | unknown | typescript
 
-> 0 routes | 0 models | 0 components | 14 lib files | 1 env vars | 4 middleware | 0% test coverage
-> **Token savings:** this file is ~1,700 tokens. Without it, AI exploration would cost ~11,600 tokens. **Saves ~9,900 tokens per conversation.**
-> **Last scanned:** 2026-07-17 09:38 — re-run after significant changes
+> 0 routes | 0 models | 0 components | 15 lib files | 1 env vars | 4 middleware | 0% test coverage
+> **Token savings:** this file is ~1,800 tokens. Without it, AI exploration would cost ~12,500 tokens. **Saves ~10,700 tokens per conversation.**
+> **Last scanned:** 2026-07-17 10:14 — re-run after significant changes
 
 ---
 
@@ -18,6 +18,7 @@
 - `browser.ts` — function openLoginInBrowser: (pi, ctx, url) => Promise<void>
 - `commands.ts` — function registerCommands: (pi, accountManager, statusController) => void
 - `hooks.ts` — function handleSessionStart: (accountManager, warningHandler?) => void, function handleNewSessionSwitch: (accountManager, warningHandler?) => void
+- `oauth-client.ts` — function loginOAuthToken: (interaction) => Promise<OAuthCredentials>, function refreshOAuthToken: (refreshToken) => Promise<OAuthCredentials>
 - `provider.ts`
   - function getOpenAICodexMirror: () => void
   - function buildMulticodexProviderConfig: (accountManager, baseProvider) => void
@@ -98,6 +99,7 @@
 ## Most Imported Files (change these carefully)
 
 - `account-manager.ts` — imported by **11** files
+- `oauth-client.ts` — imported by **5** files
 - `usage.ts` — imported by **5** files
 - `storage.ts` — imported by **4** files
 - `auth.ts` — imported by **3** files
@@ -116,6 +118,7 @@
 ## Import Map (who imports what)
 
 - `account-manager.ts` ← `account-manager.test.ts`, `commands.test.ts`, `commands.ts`, `extension.ts`, `hooks.ts` +6 more
+- `oauth-client.ts` ← `account-manager.test.ts`, `account-manager.ts`, `commands.ts`, `oauth-client.test.ts`, `refresh-race.test.ts`
 - `usage.ts` ← `account-manager.ts`, `commands.ts`, `index.ts`, `status.ts`, `usage-client.ts`
 - `storage.ts` ← `commands.ts`, `index.ts`, `scripts/generate-schema.ts`, `selection.ts`
 - `auth.ts` ← `account-manager.ts`, `auth.test.ts`, `index.ts`
@@ -124,14 +127,13 @@
 - `commands.ts` ← `commands.test.ts`, `extension.ts`
 - `status.ts` ← `commands.test.ts`, `extension.ts`
 - `extension.ts` ← `extension.test.ts`, `index.ts`
-- `hooks.ts` ← `extension.ts`, `hooks.test.ts`
 
 ---
 
 # Test Coverage
 
 > **0%** of routes and models are covered by tests
-> 9 test files found
+> 10 test files found
 
 ---
 

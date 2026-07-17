@@ -1,41 +1,30 @@
 import type { OAuthCredentials } from "@earendil-works/pi-ai/oauth";
+import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 
-const TOKEN_URL = "https://auth.openai.com/oauth/token";
-const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
+type OAuth = NonNullable<
+	ReturnType<typeof openaiCodexProvider>["auth"]["oauth"]
+>;
+type AuthInteraction = Parameters<OAuth["login"]>[0];
+
+function getOAuth() {
+	const oauth = openaiCodexProvider().auth.oauth;
+	if (!oauth) throw new Error("OpenAI Codex OAuth is unavailable");
+	return oauth;
+}
+
+export async function loginOAuthToken(
+	interaction: AuthInteraction,
+): Promise<OAuthCredentials> {
+	return getOAuth().login(interaction);
+}
 
 export async function refreshOAuthToken(
 	refreshToken: string,
 ): Promise<OAuthCredentials> {
-	const response = await fetch(TOKEN_URL, {
-		method: "POST",
-		headers: { "Content-Type": "application/x-www-form-urlencoded" },
-		body: new URLSearchParams({
-			grant_type: "refresh_token",
-			refresh_token: refreshToken,
-			client_id: CLIENT_ID,
-		}),
+	return getOAuth().refresh({
+		type: "oauth",
+		access: "",
+		refresh: refreshToken,
+		expires: 0,
 	});
-	if (!response.ok) {
-		const body = await response.text().catch(() => "");
-		throw new Error(
-			`OpenAI Codex token refresh failed (${response.status}): ${body || response.statusText}`,
-		);
-	}
-	const body = (await response.json()) as {
-		access_token?: string;
-		refresh_token?: string;
-		expires_in?: number;
-	};
-	if (
-		!body.access_token ||
-		!body.refresh_token ||
-		typeof body.expires_in !== "number"
-	) {
-		throw new Error("OpenAI Codex token refresh response missing fields");
-	}
-	return {
-		access: body.access_token,
-		refresh: body.refresh_token,
-		expires: Date.now() + body.expires_in * 1000,
-	};
 }
