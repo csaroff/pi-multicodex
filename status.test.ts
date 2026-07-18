@@ -536,11 +536,11 @@ describe("createUsageStatusController", () => {
 
 		expect(setStatus).toHaveBeenCalledWith(
 			"multicodex-account-usage-0",
-			expect.stringContaining("▶ a@example.com · 5h:[█████████░░░] 75% left"),
+			expect.stringContaining("\x1b[38;2;85;182;133m█████████\x1b[39m"),
 		);
 		expect(setStatus).toHaveBeenCalledWith(
 			"multicodex-account-usage-0",
-			expect.stringContaining("7d:[█████░░░░░░░] 40% left"),
+			expect.stringContaining("\x1b[38;2;54;54;58m░░░░░░░\x1b[39m"),
 		);
 	});
 

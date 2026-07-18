@@ -34,6 +34,9 @@ const SEGMENT_SEPARATOR = "·";
 const FIVE_HOUR_LABEL = "5h:";
 const SEVEN_DAY_LABEL = "7d:";
 const USAGE_BAR_SEGMENTS = 12;
+const USAGE_BAR_FILLED_ANSI = "\x1b[38;2;85;182;133m";
+const USAGE_BAR_EMPTY_ANSI = "\x1b[38;2;54;54;58m";
+const ANSI_FOREGROUND_RESET = "\x1b[39m";
 
 function isStaleContextError(error: unknown): boolean {
 	return (
@@ -213,7 +216,9 @@ function formatUsageBar(
 	const filled = Math.round(
 		(clampPercent(displayPercent) / 100) * USAGE_BAR_SEGMENTS,
 	);
-	return `[${"█".repeat(filled)}${"░".repeat(USAGE_BAR_SEGMENTS - filled)}]`;
+	const filledText = `${USAGE_BAR_FILLED_ANSI}${"█".repeat(filled)}${ANSI_FOREGROUND_RESET}`;
+	const emptyText = `${USAGE_BAR_EMPTY_ANSI}${"░".repeat(USAGE_BAR_SEGMENTS - filled)}${ANSI_FOREGROUND_RESET}`;
+	return `[${filledText}${emptyText}]`;
 }
 
 function formatAccountText(
@@ -290,19 +295,18 @@ function formatUsageSegment(
 		preferences.usageMode,
 	);
 	const bar = showBar ? formatUsageBar(displayPercent) : undefined;
-	const parts = [
-		`${label}${bar ? `${bar} ` : ""}${formatPercent(displayPercent, preferences.usageMode)}`,
-	];
+	const parts = [formatPercent(displayPercent, preferences.usageMode)];
 	if (showReset) {
 		const countdown = formatResetCountdown(resetAt);
 		if (countdown) {
 			parts.push(`(↺${countdown})`);
 		}
 	}
-	return ctx.ui.theme.fg(
-		getUsageSeverityToken(displayPercent, preferences.usageMode),
-		parts.join(" "),
-	);
+	const severity = getUsageSeverityToken(displayPercent, preferences.usageMode);
+	if (bar) {
+		return `${ctx.ui.theme.fg(severity, label)}${bar} ${ctx.ui.theme.fg(severity, parts.join(" "))}`;
+	}
+	return ctx.ui.theme.fg(severity, `${label}${parts.join(" ")}`);
 }
 
 export function isManagedModel(model: MaybeModel): boolean {
