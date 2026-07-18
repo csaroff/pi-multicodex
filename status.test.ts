@@ -542,6 +542,10 @@ describe("createUsageStatusController", () => {
 			"multicodex-account-usage-0",
 			expect.stringContaining("\x1b[38;2;54;54;58m░░░░░░░\x1b[39m"),
 		);
+		expect(setStatus).toHaveBeenCalledWith(
+			"multicodex-account-usage-0",
+			expect.stringContaining("\x1b[38;2;85;182;133m40% left (↺"),
+		);
 	});
 
 	it("styles the active per-account usage widget more strongly", async () => {

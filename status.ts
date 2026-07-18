@@ -38,6 +38,10 @@ const USAGE_BAR_FILLED_ANSI = "\x1b[38;2;85;182;133m";
 const USAGE_BAR_EMPTY_ANSI = "\x1b[38;2;54;54;58m";
 const ANSI_FOREGROUND_RESET = "\x1b[39m";
 
+function formatUsageBarText(text: string): string {
+	return `${USAGE_BAR_FILLED_ANSI}${text}${ANSI_FOREGROUND_RESET}`;
+}
+
 function isStaleContextError(error: unknown): boolean {
 	return (
 		error instanceof Error &&
@@ -216,7 +220,7 @@ function formatUsageBar(
 	const filled = Math.round(
 		(clampPercent(displayPercent) / 100) * USAGE_BAR_SEGMENTS,
 	);
-	const filledText = `${USAGE_BAR_FILLED_ANSI}${"█".repeat(filled)}${ANSI_FOREGROUND_RESET}`;
+	const filledText = formatUsageBarText("█".repeat(filled));
 	const emptyText = `${USAGE_BAR_EMPTY_ANSI}${"░".repeat(USAGE_BAR_SEGMENTS - filled)}${ANSI_FOREGROUND_RESET}`;
 	return `[${filledText}${emptyText}]`;
 }
@@ -302,10 +306,10 @@ function formatUsageSegment(
 			parts.push(`(↺${countdown})`);
 		}
 	}
-	const severity = getUsageSeverityToken(displayPercent, preferences.usageMode);
 	if (bar) {
-		return `${ctx.ui.theme.fg(severity, label)}${bar} ${ctx.ui.theme.fg(severity, parts.join(" "))}`;
+		return `${formatUsageBarText(label)}${bar} ${formatUsageBarText(parts.join(" "))}`;
 	}
+	const severity = getUsageSeverityToken(displayPercent, preferences.usageMode);
 	return ctx.ui.theme.fg(severity, `${label}${parts.join(" ")}`);
 }
 
