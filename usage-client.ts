@@ -4,10 +4,12 @@ import { type CodexUsageSnapshot, parseCodexUsageResponse } from "./usage";
 interface WhamUsageResponse {
 	rate_limit?: {
 		primary_window?: {
+			limit_window_seconds?: number;
 			reset_at?: number;
 			used_percent?: number;
 		};
 		secondary_window?: {
+			limit_window_seconds?: number;
 			reset_at?: number;
 			used_percent?: number;
 		};

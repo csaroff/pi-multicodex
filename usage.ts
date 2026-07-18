@@ -17,9 +17,12 @@ interface WhamUsageResponse {
 }
 
 type WhamUsageWindow = {
+	limit_window_seconds?: number;
 	reset_at?: number;
 	used_percent?: number;
 };
+
+const WEEK_SECONDS = 7 * 24 * 60 * 60;
 
 function normalizeUsedPercent(value?: number): number | undefined {
 	if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
@@ -44,8 +47,16 @@ function parseUsageWindow(
 export function parseCodexUsageResponse(
 	data: WhamUsageResponse,
 ): Omit<CodexUsageSnapshot, "fetchedAt"> {
+	const primaryWindow = data.rate_limit?.primary_window;
+	if (
+		primaryWindow?.limit_window_seconds === WEEK_SECONDS &&
+		!data.rate_limit?.secondary_window
+	) {
+		return { secondary: parseUsageWindow(primaryWindow) };
+	}
+
 	return {
-		primary: parseUsageWindow(data.rate_limit?.primary_window),
+		primary: parseUsageWindow(primaryWindow),
 		secondary: parseUsageWindow(data.rate_limit?.secondary_window),
 	};
 }

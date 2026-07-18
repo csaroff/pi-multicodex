@@ -210,6 +210,23 @@ describe("usage helpers", () => {
 		expect(response.secondary?.resetAt).toBe(1700003600 * 1000);
 	});
 
+	it("recognizes a weekly-only primary API window", () => {
+		const response = parseCodexUsageResponse({
+			rate_limit: {
+				primary_window: {
+					limit_window_seconds: 7 * 24 * 60 * 60,
+					reset_at: 1700003600,
+					used_percent: 19,
+				},
+				secondary_window: undefined,
+			},
+		});
+
+		expect(response.primary).toBeUndefined();
+		expect(response.secondary?.usedPercent).toBe(19);
+		expect(response.secondary?.resetAt).toBe(1700003600 * 1000);
+	});
+
 	it("detects untouched usage", () => {
 		expect(
 			isUsageUntouched({
