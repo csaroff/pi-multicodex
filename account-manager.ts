@@ -13,7 +13,7 @@ import {
 import { type CodexUsageSnapshot, getNextResetAt } from "./usage";
 import { fetchCodexUsage } from "./usage-client";
 
-const USAGE_CACHE_TTL_MS = 5 * 60 * 1000;
+const USAGE_CACHE_TTL_MS = 60 * 1000;
 const USAGE_REQUEST_TIMEOUT_MS = 10 * 1000;
 const QUOTA_COOLDOWN_MS = 60 * 60 * 1000;
 const TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000;
