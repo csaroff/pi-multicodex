@@ -62,6 +62,41 @@ describe("AccountManager usage warnings", () => {
 	});
 });
 
+describe("AccountManager usage cache", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-08-03T00:00:00Z"));
+		vi.clearAllMocks();
+		mocks.storageData.accounts = [];
+		mocks.storageData.activeEmail = undefined;
+		mocks.loadImportedOpenAICodexAuth.mockResolvedValue(undefined);
+		mocks.fetchCodexUsage.mockImplementation(async () => ({
+			primary: { usedPercent: 10, resetAt: Date.now() + 60_000 },
+			secondary: { usedPercent: 20, resetAt: Date.now() + 120_000 },
+			fetchedAt: Date.now(),
+		}));
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("keeps usage cached between one-minute footer refreshes", async () => {
+		const manager = new AccountManager();
+		const account = manager.addOrUpdateAccount("cache@example.com", {
+			access: "access",
+			refresh: "refresh",
+			expires: Date.now() + 3_600_000,
+		});
+
+		await manager.refreshUsageForAccount(account);
+		vi.setSystemTime(new Date(Date.now() + 60_000));
+		await manager.refreshUsageForAccount(account);
+
+		expect(mocks.fetchCodexUsage).toHaveBeenCalledTimes(1);
+	});
+});
+
 describe("AccountManager quota exhaustion", () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
