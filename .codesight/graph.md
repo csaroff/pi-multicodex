@@ -4,7 +4,7 @@
 
 - `account-manager.ts` — imported by **11** files
 - `oauth-client.ts` — imported by **6** files
-- `usage.ts` — imported by **5** files
+- `usage.ts` — imported by **6** files
 - `storage.ts` — imported by **4** files
 - `auth.ts` — imported by **3** files
 - `quota.ts` — imported by **3** files
@@ -24,7 +24,7 @@
 
 - `account-manager.ts` ← `account-manager.test.ts`, `commands.test.ts`, `commands.ts`, `extension.ts`, `hooks.ts` +6 more
 - `oauth-client.ts` ← `account-manager.test.ts`, `account-manager.ts`, `commands.test.ts`, `commands.ts`, `oauth-client.test.ts` +1 more
-- `usage.ts` ← `account-manager.ts`, `commands.ts`, `index.ts`, `status.ts`, `usage-client.ts`
+- `usage.ts` ← `account-manager.ts`, `commands.ts`, `index.ts`, `status.ts`, `usage-cache.ts` +1 more
 - `storage.ts` ← `commands.ts`, `index.ts`, `scripts/generate-schema.ts`, `selection.ts`
 - `auth.ts` ← `account-manager.ts`, `auth.test.ts`, `index.ts`
 - `quota.ts` ← `account-manager.ts`, `index.ts`, `stream-wrapper.ts`

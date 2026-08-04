@@ -46,6 +46,7 @@
 		"status.ts",
 		"storage.ts",
 		"stream-wrapper.ts",
+		"usage-cache.ts",
 		"usage-client.ts",
 		"usage.ts",
 		"README.md",

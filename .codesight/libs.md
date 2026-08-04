@@ -43,6 +43,11 @@
   - const StorageSchema
   - const STORAGE_FILE
 - `stream-wrapper.ts` — function setCloseCodexWebSocketSessionsForTest: (handler) => void, function createStreamWrapper: (accountManager, baseProvider) => void
+- `usage-cache.ts`
+  - function getSharedUsageKey: (account) => string
+  - function loadSharedUsageCache: (filePath) => Map<string, CodexUsageSnapshot>
+  - function getOrFetchSharedUsage: (account, fetchUsage) => void
+  - const SHARED_USAGE_CACHE_PATH
 - `usage-client.ts` — function fetchCodexUsage: (accessToken, accountId, options?) => Promise<CodexUsageSnapshot>
 - `usage.ts`
   - function parseCodexUsageResponse: (data) => Omit<CodexUsageSnapshot, "fetchedAt">

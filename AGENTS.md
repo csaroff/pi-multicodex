@@ -34,6 +34,8 @@ The current codebase is organized around these responsibilities:
   - account selection logic (untouched preference, earliest weekly reset, random fallback)
 - `usage.ts` / `usage-client.ts`
   - usage data parsing and Codex API fetching
+- `usage-cache.ts`
+  - global credential-free usage snapshots and cross-process fetch deduplication
 - `quota.ts`
   - quota/rate-limit error classification
 - `browser.ts`
@@ -56,6 +58,7 @@ The current codebase is organized around these responsibilities:
   - `/multicodex reset [manual|quota|all]`
   - `/multicodex help`
 - Footer settings are persisted in `~/.pi/agent/settings.json` under `pi-multicodex`.
+- Usage snapshots are shared across profiles in `~/.pi/agent/codex-usage-cache.json`.
 - Shared provider mirroring, stream primitives, and agent-path helpers come from `@victor-software-house/pi-provider-utils`.
 - Rotation criteria are still hard-coded.
 

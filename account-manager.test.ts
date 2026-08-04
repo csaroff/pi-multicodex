@@ -8,6 +8,13 @@ const mocks = vi.hoisted(() => ({
 	loadImportedOpenAICodexAuth: vi.fn(),
 	saveStorage: vi.fn(),
 	fetchCodexUsage: vi.fn(),
+	getOrFetchSharedUsage: vi.fn(
+		async (
+			_account: unknown,
+			fetchUsage: () => Promise<Record<string, unknown>>,
+		) => fetchUsage(),
+	),
+	loadSharedUsageCache: vi.fn(() => new Map()),
 }));
 
 vi.mock("./storage", () => ({
@@ -25,6 +32,13 @@ vi.mock("./auth", () => ({
 
 vi.mock("./usage-client", () => ({
 	fetchCodexUsage: mocks.fetchCodexUsage,
+}));
+
+vi.mock("./usage-cache", () => ({
+	getOrFetchSharedUsage: mocks.getOrFetchSharedUsage,
+	getSharedUsageKey: (account: { email: string; accountId?: string }) =>
+		`email:${account.email.toLowerCase()}`,
+	loadSharedUsageCache: mocks.loadSharedUsageCache,
 }));
 
 vi.mock("./oauth-client", () => ({
@@ -94,6 +108,49 @@ describe("AccountManager usage cache", () => {
 		await manager.refreshUsageForAccount(account);
 
 		expect(mocks.fetchCodexUsage).toHaveBeenCalledTimes(1);
+	});
+
+	it("hydrates managed accounts from the shared cache", () => {
+		mocks.storageData.accounts = [
+			{
+				email: "shared@example.com",
+				accountId: "shared-account",
+				accessToken: "access",
+				refreshToken: "refresh",
+				expiresAt: Date.now() + 3_600_000,
+			},
+		];
+		const usage = { primary: { usedPercent: 25 }, fetchedAt: Date.now() };
+		mocks.loadSharedUsageCache.mockReturnValueOnce(
+			new Map([["email:shared@example.com", usage]]),
+		);
+
+		const manager = new AccountManager();
+
+		expect(manager.getCachedUsage("shared@example.com")).toEqual(usage);
+	});
+
+	it("does not hydrate expired shared usage into account selection", () => {
+		mocks.storageData.accounts = [
+			{
+				email: "stale@example.com",
+				accessToken: "access",
+				refreshToken: "refresh",
+				expiresAt: Date.now() + 3_600_000,
+			},
+		];
+		mocks.loadSharedUsageCache.mockReturnValueOnce(
+			new Map([
+				[
+					"email:stale@example.com",
+					{ primary: { usedPercent: 99 }, fetchedAt: Date.now() - 300_000 },
+				],
+			]),
+		);
+
+		const manager = new AccountManager();
+
+		expect(manager.getCachedUsage("stale@example.com")).toBeUndefined();
 	});
 });
 

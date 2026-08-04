@@ -27,6 +27,15 @@ vi.mock("./auth", () => ({
 	loadImportedOpenAICodexAuth: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("./usage-cache", () => ({
+	getOrFetchSharedUsage: vi.fn(
+		async (_account: unknown, fetchUsage: () => Promise<unknown>) =>
+			fetchUsage(),
+	),
+	getSharedUsageKey: ({ email }: { email: string }) => `email:${email}`,
+	loadSharedUsageCache: () => new Map(),
+}));
+
 import { refreshOAuthToken } from "./oauth-client";
 
 describe("AccountManager.ensureValidToken — concurrent refresh deduplication", () => {

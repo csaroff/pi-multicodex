@@ -2,9 +2,9 @@
 
 > **Stack:** raw-http | none | unknown | typescript
 
-> 0 routes | 0 models | 0 components | 16 lib files | 1 env vars | 4 middleware | 0% test coverage
-> **Token savings:** this file is ~1,800 tokens. Without it, AI exploration would cost ~13,000 tokens. **Saves ~11,200 tokens per conversation.**
-> **Last scanned:** 2026-08-04 17:14 — re-run after significant changes
+> 0 routes | 0 models | 0 components | 17 lib files | 1 env vars | 4 middleware | 0% test coverage
+> **Token savings:** this file is ~1,900 tokens. Without it, AI exploration would cost ~13,500 tokens. **Saves ~11,600 tokens per conversation.**
+> **Last scanned:** 2026-08-04 17:56 — re-run after significant changes
 
 ---
 
@@ -53,6 +53,11 @@
   - const StorageSchema
   - const STORAGE_FILE
 - `stream-wrapper.ts` — function setCloseCodexWebSocketSessionsForTest: (handler) => void, function createStreamWrapper: (accountManager, baseProvider) => void
+- `usage-cache.ts`
+  - function getSharedUsageKey: (account) => string
+  - function loadSharedUsageCache: (filePath) => Map<string, CodexUsageSnapshot>
+  - function getOrFetchSharedUsage: (account, fetchUsage) => void
+  - const SHARED_USAGE_CACHE_PATH
 - `usage-client.ts` — function fetchCodexUsage: (accessToken, accountId, options?) => Promise<CodexUsageSnapshot>
 - `usage.ts`
   - function parseCodexUsageResponse: (data) => Omit<CodexUsageSnapshot, "fetchedAt">
@@ -101,7 +106,7 @@
 
 - `account-manager.ts` — imported by **11** files
 - `oauth-client.ts` — imported by **6** files
-- `usage.ts` — imported by **5** files
+- `usage.ts` — imported by **6** files
 - `storage.ts` — imported by **4** files
 - `auth.ts` — imported by **3** files
 - `quota.ts` — imported by **3** files
@@ -121,7 +126,7 @@
 
 - `account-manager.ts` ← `account-manager.test.ts`, `commands.test.ts`, `commands.ts`, `extension.ts`, `hooks.ts` +6 more
 - `oauth-client.ts` ← `account-manager.test.ts`, `account-manager.ts`, `commands.test.ts`, `commands.ts`, `oauth-client.test.ts` +1 more
-- `usage.ts` ← `account-manager.ts`, `commands.ts`, `index.ts`, `status.ts`, `usage-client.ts`
+- `usage.ts` ← `account-manager.ts`, `commands.ts`, `index.ts`, `status.ts`, `usage-cache.ts` +1 more
 - `storage.ts` ← `commands.ts`, `index.ts`, `scripts/generate-schema.ts`, `selection.ts`
 - `auth.ts` ← `account-manager.ts`, `auth.test.ts`, `index.ts`
 - `quota.ts` ← `account-manager.ts`, `index.ts`, `stream-wrapper.ts`
@@ -135,7 +140,7 @@
 # Test Coverage
 
 > **0%** of routes and models are covered by tests
-> 10 test files found
+> 11 test files found
 
 ---
 

@@ -11,6 +11,11 @@ import {
 	saveStorage,
 } from "./storage";
 import { type CodexUsageSnapshot, getNextResetAt } from "./usage";
+import {
+	getOrFetchSharedUsage,
+	getSharedUsageKey,
+	loadSharedUsageCache,
+} from "./usage-cache";
 import { fetchCodexUsage } from "./usage-client";
 
 const USAGE_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -54,6 +59,14 @@ export class AccountManager {
 
 	constructor() {
 		this.data = loadStorage();
+		const sharedUsage = loadSharedUsageCache();
+		const now = Date.now();
+		for (const account of this.data.accounts) {
+			const usage = sharedUsage.get(getSharedUsageKey(account));
+			if (usage && now - usage.fetchedAt < USAGE_CACHE_TTL_MS) {
+				this.usageCache.set(account.email, usage);
+			}
+		}
 	}
 
 	/**
@@ -535,11 +548,21 @@ export class AccountManager {
 		}
 
 		try {
-			const token = await this.ensureValidToken(account);
-			const usage = await fetchCodexUsage(token, account.accountId, {
-				signal: options?.signal,
-				timeoutMs: USAGE_REQUEST_TIMEOUT_MS,
-			});
+			const usage = await getOrFetchSharedUsage(
+				account,
+				async () => {
+					const token = await this.ensureValidToken(account);
+					return fetchCodexUsage(token, account.accountId, {
+						signal: options?.signal,
+						timeoutMs: USAGE_REQUEST_TIMEOUT_MS,
+					});
+				},
+				{
+					ttlMs: USAGE_CACHE_TTL_MS,
+					force: options?.force,
+					signal: options?.signal,
+				},
+			);
 			this.usageCache.set(account.email, usage);
 			this.notifyStateChanged();
 			return usage;
@@ -577,9 +600,7 @@ export class AccountManager {
 		});
 		if (stale.length === 0) return;
 		await Promise.all(
-			stale.map((account) =>
-				this.refreshUsageForAccount(account, { force: true, ...options }),
-			),
+			stale.map((account) => this.refreshUsageForAccount(account, options)),
 		);
 	}
 
