@@ -35,6 +35,7 @@
 		"auth.ts",
 		"browser.ts",
 		"commands.ts",
+		"context-utils.ts",
 		"extension.ts",
 		"hooks.ts",
 		"index.ts",

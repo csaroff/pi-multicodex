@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 	statusRefreshFor: vi.fn(),
 	statusStartAutoRefresh: vi.fn(),
 	statusStopAutoRefresh: vi.fn(),
+	statusDispose: vi.fn(),
 	statusLoadPreferences: vi.fn().mockResolvedValue(undefined),
 	statusScheduleModelSelectRefresh: vi.fn(),
 }));
@@ -41,6 +42,7 @@ vi.mock("./status", () => ({
 		scheduleModelSelectRefresh: mocks.statusScheduleModelSelectRefresh,
 		startAutoRefresh: mocks.statusStartAutoRefresh,
 		stopAutoRefresh: mocks.statusStopAutoRefresh,
+		dispose: mocks.statusDispose,
 	}),
 }));
 
@@ -57,6 +59,7 @@ describe("multicodexExtension", () => {
 		mocks.statusRefreshFor.mockClear();
 		mocks.statusStartAutoRefresh.mockClear();
 		mocks.statusStopAutoRefresh.mockClear();
+		mocks.statusDispose.mockClear();
 		mocks.statusLoadPreferences.mockClear();
 		mocks.statusScheduleModelSelectRefresh.mockClear();
 	});
@@ -134,7 +137,8 @@ describe("multicodexExtension", () => {
 		expect(mocks.statusScheduleModelSelectRefresh).toHaveBeenCalledWith(ctx);
 
 		sessionShutdown?.({}, ctx as never);
-		expect(mocks.statusStopAutoRefresh).toHaveBeenCalledWith(ctx);
+		expect(mocks.statusDispose).toHaveBeenCalledWith(ctx);
+		expect(mocks.setWarningHandler).toHaveBeenLastCalledWith(undefined);
 	});
 
 	it("swallows stale-context warning notifications", () => {

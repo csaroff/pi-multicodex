@@ -16,6 +16,7 @@ import {
 	writeJsonObjectFileAsync,
 } from "pi-provider-utils/agent-paths";
 import type { AccountManager } from "./account-manager";
+import { isStaleExtensionContextError } from "./context-utils";
 import { PROVIDER_ID } from "./provider";
 import { type CodexUsageSnapshot, formatResetAt } from "./usage";
 
@@ -40,15 +41,6 @@ const ANSI_FOREGROUND_RESET = "\x1b[39m";
 
 function formatUsageBarText(text: string): string {
 	return `${USAGE_BAR_FILLED_ANSI}${text}${ANSI_FOREGROUND_RESET}`;
-}
-
-function isStaleContextError(error: unknown): boolean {
-	return (
-		error instanceof Error &&
-		/This extension (?:instance|ctx) is stale after session replacement or reload/.test(
-			error.message,
-		)
-	);
 }
 
 type MaybeModel = Model<Api> | undefined;
@@ -480,6 +472,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 	let accountStatusGeneration = 0;
 	let preferences: FooterPreferences = DEFAULT_PREFERENCES;
 	let livePreviewPreferences: FooterPreferences | undefined;
+	let disposed = false;
 
 	function abandonContext(ctx: ExtensionContext): void {
 		if (activeContext === ctx) {
@@ -495,7 +488,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 		try {
 			return action();
 		} catch (error) {
-			if (isStaleContextError(error)) {
+			if (isStaleExtensionContextError(error)) {
 				abandonContext(ctx);
 				return fallback;
 			}
@@ -503,7 +496,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 		}
 	}
 
-	accountManager.onStateChange(() => {
+	const unsubscribeStateChange = accountManager.onStateChange(() => {
 		if (!activeContext) return;
 		renderCachedStatus(activeContext, livePreviewPreferences ?? preferences);
 	});
@@ -644,6 +637,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 		const usage =
 			(await accountManager.refreshUsageForAccount(activeAccount)) ??
 			cachedUsage;
+		if (disposed || activeContext !== ctx) return;
 		const currentAccount = getFooterAccount(accountManager);
 		if (currentAccount?.email !== activeAccount.email) {
 			renderCachedStatus(ctx, livePreviewPreferences ?? preferences);
@@ -674,6 +668,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 				} catch {
 					return;
 				}
+				if (disposed || activeContext !== ctx) return;
 				const usage = refreshedUsage ?? cachedUsage;
 				if (!usage || generation !== accountStatusGeneration) return;
 				const currentAccounts = getManagedStatusAccounts(accountManager) ?? [];
@@ -699,6 +694,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 	}
 
 	async function refreshFor(ctx: ExtensionContext): Promise<void> {
+		if (disposed) return;
 		activeContext = ctx;
 		if (refreshInFlight) {
 			queuedRefresh = true;
@@ -710,14 +706,17 @@ export function createUsageStatusController(accountManager: AccountManager) {
 			await updateStatus(ctx);
 		} finally {
 			refreshInFlight = false;
-			if (queuedRefresh && activeContext) {
+			if (!disposed && queuedRefresh && activeContext) {
 				queuedRefresh = false;
 				await refreshFor(activeContext);
+			} else if (disposed) {
+				queuedRefresh = false;
 			}
 		}
 	}
 
 	function scheduleModelSelectRefresh(ctx: ExtensionContext): void {
+		if (disposed) return;
 		activeContext = ctx;
 		renderCachedStatus(ctx, livePreviewPreferences ?? preferences);
 		if (modelSelectTimer) {
@@ -731,6 +730,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 	}
 
 	function startAutoRefresh(): void {
+		if (disposed) return;
 		if (refreshTimer) clearInterval(refreshTimer);
 		refreshTimer = setInterval(() => {
 			if (!activeContext) return;
@@ -749,10 +749,17 @@ export function createUsageStatusController(accountManager: AccountManager) {
 			modelSelectTimer = undefined;
 		}
 		livePreviewPreferences = undefined;
-		clearStatus(ctx ?? activeContext);
-		clearAccountStatuses(ctx ?? activeContext);
+		const contextToClear = ctx ?? activeContext;
 		activeContext = undefined;
 		queuedRefresh = false;
+		clearStatus(contextToClear);
+		clearAccountStatuses(contextToClear);
+	}
+
+	function dispose(ctx?: ExtensionContext): void {
+		disposed = true;
+		stopAutoRefresh(ctx);
+		unsubscribeStateChange();
 	}
 
 	async function loadPreferences(ctx?: ExtensionContext): Promise<void> {
@@ -847,6 +854,7 @@ export function createUsageStatusController(accountManager: AccountManager) {
 		scheduleModelSelectRefresh,
 		startAutoRefresh,
 		stopAutoRefresh,
+		dispose,
 		getPreferences: () => preferences,
 	};
 }

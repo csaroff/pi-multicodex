@@ -2,9 +2,9 @@
 
 > **Stack:** raw-http | none | unknown | typescript
 
-> 0 routes | 0 models | 0 components | 15 lib files | 1 env vars | 4 middleware | 0% test coverage
-> **Token savings:** this file is ~1,800 tokens. Without it, AI exploration would cost ~12,500 tokens. **Saves ~10,700 tokens per conversation.**
-> **Last scanned:** 2026-08-02 23:58 — re-run after significant changes
+> 0 routes | 0 models | 0 components | 16 lib files | 1 env vars | 4 middleware | 0% test coverage
+> **Token savings:** this file is ~1,800 tokens. Without it, AI exploration would cost ~13,000 tokens. **Saves ~11,200 tokens per conversation.**
+> **Last scanned:** 2026-08-04 17:14 — re-run after significant changes
 
 ---
 
@@ -17,6 +17,7 @@
   - interface ImportedOpenAICodexAuth
 - `browser.ts` — function openLoginInBrowser: (pi, ctx, url) => Promise<void>
 - `commands.ts` — function registerCommands: (pi, accountManager, statusController) => void
+- `context-utils.ts` — function isStaleExtensionContextError: (error) => boolean
 - `hooks.ts` — function handleSessionStart: (accountManager, warningHandler?) => void, function handleNewSessionSwitch: (accountManager, warningHandler?) => void
 - `oauth-client.ts` — function loginOAuthToken: (interaction) => Promise<OAuthCredentials>, function refreshOAuthToken: (refreshToken) => Promise<OAuthCredentials>
 - `provider.ts`
@@ -109,6 +110,7 @@
 - `commands.ts` — imported by **2** files
 - `status.ts` — imported by **2** files
 - `extension.ts` — imported by **2** files
+- `context-utils.ts` — imported by **2** files
 - `hooks.ts` — imported by **2** files
 - `provider.ts` — imported by **2** files
 - `selection.ts` — imported by **1** files

@@ -13,6 +13,7 @@
 - `commands.ts` — imported by **2** files
 - `status.ts` — imported by **2** files
 - `extension.ts` — imported by **2** files
+- `context-utils.ts` — imported by **2** files
 - `hooks.ts` — imported by **2** files
 - `provider.ts` — imported by **2** files
 - `selection.ts` — imported by **1** files

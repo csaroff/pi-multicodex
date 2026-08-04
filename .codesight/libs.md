@@ -7,6 +7,7 @@
   - interface ImportedOpenAICodexAuth
 - `browser.ts` — function openLoginInBrowser: (pi, ctx, url) => Promise<void>
 - `commands.ts` — function registerCommands: (pi, accountManager, statusController) => void
+- `context-utils.ts` — function isStaleExtensionContextError: (error) => boolean
 - `hooks.ts` — function handleSessionStart: (accountManager, warningHandler?) => void, function handleNewSessionSwitch: (accountManager, warningHandler?) => void
 - `oauth-client.ts` — function loginOAuthToken: (interaction) => Promise<OAuthCredentials>, function refreshOAuthToken: (refreshToken) => Promise<OAuthCredentials>
 - `provider.ts`

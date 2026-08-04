@@ -487,6 +487,79 @@ describe("createUsageStatusController", () => {
 		expect(setStatus).not.toHaveBeenCalled();
 	});
 
+	it("does not touch a session context after shutdown", async () => {
+		let finishRefresh!: (value: ReturnType<typeof usage>) => void;
+		let stale = false;
+		const unsubscribe = vi.fn();
+		const setStatus = vi.fn(() => {
+			if (stale) {
+				throw new Error(
+					"This extension ctx is stale after session replacement or reload.",
+				);
+			}
+		});
+		const refreshUsageForAccount = vi.fn(
+			() =>
+				new Promise<ReturnType<typeof usage>>((resolve) => {
+					finishRefresh = resolve;
+				}),
+		);
+		const controller = createUsageStatusController({
+			onStateChange: () => unsubscribe,
+			getActiveAccount: () => ({ email: "a@example.com" }),
+			getCachedUsage: () => usage(10, 20),
+			refreshUsageForAccount,
+		} as never);
+		const ctx = createContext({ setStatus });
+		const refresh = controller.refreshFor(ctx);
+		await vi.waitFor(() => expect(refreshUsageForAccount).toHaveBeenCalled());
+
+		controller.dispose(ctx);
+		const callsAfterShutdown = setStatus.mock.calls.length;
+		stale = true;
+		finishRefresh(usage(30, 40));
+
+		await expect(refresh).resolves.toBeUndefined();
+		expect(setStatus).toHaveBeenCalledTimes(callsAfterShutdown);
+		expect(unsubscribe).toHaveBeenCalledOnce();
+	});
+
+	it("abandons per-account refreshes when the controller is disposed", async () => {
+		const pendingRefreshes: Array<(value: ReturnType<typeof usage>) => void> =
+			[];
+		const setStatus = vi.fn();
+		const accounts = [{ email: "a@example.com" }, { email: "b@example.com" }];
+		const refreshUsageForAccount = vi
+			.fn()
+			.mockResolvedValueOnce(usage(10, 20))
+			.mockImplementation(
+				() =>
+					new Promise<ReturnType<typeof usage>>((resolve) => {
+						pendingRefreshes.push(resolve);
+					}),
+			);
+		const controller = createUsageStatusController({
+			onStateChange: () => () => undefined,
+			getAccounts: () => accounts,
+			isPiAuthAccount: () => false,
+			getActiveAccount: () => accounts[0],
+			getCachedUsage: () => usage(10, 20),
+			refreshUsageForAccount,
+		} as never);
+		const ctx = createContext({ setStatus });
+		const refresh = controller.refreshFor(ctx);
+		await vi.waitFor(() =>
+			expect(refreshUsageForAccount).toHaveBeenCalledTimes(3),
+		);
+
+		controller.dispose(ctx);
+		const callsAfterShutdown = setStatus.mock.calls.length;
+		for (const finish of pendingRefreshes) finish(usage(30, 40));
+
+		await expect(refresh).resolves.toBeUndefined();
+		expect(setStatus).toHaveBeenCalledTimes(callsAfterShutdown);
+	});
+
 	it("renders per-account widgets on fixed IDs without changing the active-account ID", async () => {
 		const setStatus = vi.fn();
 		const accounts = [{ email: "a@example.com" }, { email: "b@example.com" }];

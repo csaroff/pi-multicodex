@@ -5,6 +5,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { AccountManager } from "./account-manager";
 import { registerCommands } from "./commands";
+import { isStaleExtensionContextError } from "./context-utils";
 import { handleNewSessionSwitch, handleSessionStart } from "./hooks";
 import { installMulticodexProviderWrapper } from "./provider";
 import { createUsageStatusController } from "./status";
@@ -14,15 +15,6 @@ export default function multicodexExtension(pi: ExtensionAPI) {
 	const statusController = createUsageStatusController(accountManager);
 	let lastContext: ExtensionContext | undefined;
 
-	function isStaleContextError(error: unknown): boolean {
-		return (
-			error instanceof Error &&
-			/This extension (?:instance|ctx) is stale after session replacement or reload/.test(
-				error.message,
-			)
-		);
-	}
-
 	function notifyWarning(
 		ctx: ExtensionContext | undefined,
 		message: string,
@@ -31,7 +23,7 @@ export default function multicodexExtension(pi: ExtensionAPI) {
 		try {
 			ctx.ui.notify(message, "warning");
 		} catch (error) {
-			if (isStaleContextError(error)) {
+			if (isStaleExtensionContextError(error)) {
 				if (lastContext === ctx) lastContext = undefined;
 				return;
 			}
@@ -51,13 +43,18 @@ export default function multicodexExtension(pi: ExtensionAPI) {
 		lastContext = ctx;
 		installMulticodexProviderWrapper(pi, accountManager);
 		accountManager.resetSessionWarnings();
-		handleSessionStart(accountManager, (msg) => notifyWarning(ctx, msg));
+		handleSessionStart(accountManager, (msg) =>
+			notifyWarning(lastContext, msg),
+		);
 		if (event.reason === "new") {
-			handleNewSessionSwitch(accountManager, (msg) => notifyWarning(ctx, msg));
+			handleNewSessionSwitch(accountManager, (msg) =>
+				notifyWarning(lastContext, msg),
+			);
 		}
 		statusController.startAutoRefresh();
 		void (async () => {
 			await statusController.loadPreferences(ctx);
+			if (lastContext !== ctx) return;
 			await statusController.refreshFor(ctx);
 		})();
 	});
@@ -76,6 +73,7 @@ export default function multicodexExtension(pi: ExtensionAPI) {
 		if (lastContext === ctx) {
 			lastContext = undefined;
 		}
-		statusController.stopAutoRefresh(ctx);
+		accountManager.setWarningHandler(undefined);
+		statusController.dispose(ctx);
 	});
 }
