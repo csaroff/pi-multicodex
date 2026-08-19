@@ -25,14 +25,22 @@ it("logs in through the public Codex provider OAuth API", async () => {
 		refresh: "refresh",
 		expires: 123,
 	};
-	mocks.login.mockResolvedValue(credential);
+	mocks.login.mockImplementation(
+		async (interaction: { signal: AbortSignal }) => {
+			expect(interaction.signal.aborted).toBe(false);
+			return credential;
+		},
+	);
 	const interaction = {
 		notify: vi.fn(),
 		prompt: vi.fn().mockResolvedValue("device_code"),
 	};
 
 	await expect(loginOAuthToken(interaction)).resolves.toBe(credential);
-	expect(mocks.login).toHaveBeenCalledWith(interaction);
+	expect(mocks.login).toHaveBeenCalledWith({
+		...interaction,
+		signal: expect.any(AbortSignal),
+	});
 });
 
 it("refreshes through the public Codex provider OAuth API", async () => {

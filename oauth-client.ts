@@ -21,7 +21,10 @@ function getOAuth(): OAuth {
 export async function loginOAuthToken(
 	interaction: AuthInteraction,
 ): Promise<OAuthCredentials> {
-	return getOAuth().login(interaction);
+	return getOAuth().login({
+		...interaction,
+		signal: interaction.signal ?? new AbortController().signal,
+	});
 }
 
 export async function refreshOAuthToken(
