@@ -53,10 +53,13 @@ it("refreshes through the public Codex provider OAuth API", async () => {
 
 	await refreshOAuthToken("old-refresh");
 
-	expect(mocks.refresh).toHaveBeenCalledWith({
-		type: "oauth",
-		access: "",
-		refresh: "old-refresh",
-		expires: 0,
-	});
+	expect(mocks.refresh).toHaveBeenCalledWith(
+		{
+			type: "oauth",
+			access: "",
+			refresh: "old-refresh",
+			expires: 0,
+		},
+		expect.any(AbortSignal),
+	);
 });

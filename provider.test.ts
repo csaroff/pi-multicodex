@@ -6,17 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
 	currentProvider: undefined as unknown,
 	getModels: vi.fn(() => []),
-	mirrorProvider: vi.fn(() => ({ baseUrl: "https://codex.example" })),
 }));
 
 vi.mock("@earendil-works/pi-ai/compat", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@earendil-works/pi-ai/compat")>()),
 	getApiProvider: () => mocks.currentProvider,
 	getModels: mocks.getModels,
-}));
-
-vi.mock("pi-provider-utils/providers", () => ({
-	mirrorProvider: mocks.mirrorProvider,
 }));
 
 import type { AccountManager } from "./account-manager";
@@ -171,7 +166,6 @@ describe("getOpenAICodexMirror", () => {
 		agentDir = mkdtempSync(join(tmpdir(), "pi-multicodex-test-"));
 		process.env.PI_CODING_AGENT_DIR = agentDir;
 		vi.clearAllMocks();
-		mocks.mirrorProvider.mockReturnValue({ baseUrl: "https://codex.example" });
 	});
 
 	afterEach(() => {
@@ -188,6 +182,7 @@ describe("getOpenAICodexMirror", () => {
 			{
 				id: "codex-test",
 				name: "Codex Test",
+				baseUrl: "https://codex.example",
 				reasoning: true,
 				thinkingLevelMap: { medium: "medium", high: "high" },
 				input: ["text"],

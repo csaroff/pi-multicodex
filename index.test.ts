@@ -131,6 +131,8 @@ describe("getOpenAICodexMirror", () => {
 				cost: m.cost,
 				contextWindow: m.contextWindow,
 				maxTokens: m.maxTokens,
+				...(m.headers ? { headers: m.headers } : {}),
+				...(m.compat ? { compat: m.compat } : {}),
 			})),
 		};
 

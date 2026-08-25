@@ -1,5 +1,4 @@
 import type { OAuthCredentials } from "@earendil-works/pi-ai/oauth";
-import { normalizeUnknownError } from "pi-provider-utils/streams";
 import { loadImportedOpenAICodexAuth } from "./auth";
 import { refreshOAuthToken } from "./oauth-client";
 import { extractQuotaResetAt } from "./quota";
@@ -10,6 +9,7 @@ import {
 	type StorageData,
 	saveStorage,
 } from "./storage";
+import { normalizeUnknownError } from "./stream-utils";
 import { type CodexUsageSnapshot, getNextResetAt } from "./usage";
 import {
 	getOrFetchSharedUsage,

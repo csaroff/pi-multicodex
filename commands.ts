@@ -14,9 +14,8 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
-import { getAgentSettingsPath } from "pi-provider-utils/agent-paths";
-import { normalizeUnknownError } from "pi-provider-utils/streams";
 import type { AccountManager } from "./account-manager";
+import { getAgentSettingsPath } from "./agent-paths";
 import { openLoginInBrowser } from "./browser";
 import { loginOAuthToken } from "./oauth-client";
 import {
@@ -25,6 +24,7 @@ import {
 	type PercentDisplayMode,
 } from "./status";
 import { type Account, STORAGE_FILE } from "./storage";
+import { normalizeUnknownError } from "./stream-utils";
 import { isUsageUntouched } from "./usage";
 
 const SETTINGS_FILE = getAgentSettingsPath();

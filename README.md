@@ -94,7 +94,7 @@ These per-account widgets show managed MultiCodex accounts only, ignore the ephe
 - **Token refresh.** OAuth tokens are refreshed before expiry so requests do not fail due to stale credentials. You can also force a health refresh with `/multicodex refresh` or re-authenticate explicitly with `/multicodex reauth`.
 - **Usage tracking.** Usage data is cached for 5 minutes per account in `~/.pi/agent/codex-usage-cache.json`, so all running pi profiles reuse the same snapshot instead of making duplicate Codex API requests. The cache contains usage data only, never credentials.
 - **Quota cooldown.** When an account is exhausted, it stays on cooldown until its next known reset time (or 1 hour if the reset time is unknown).
-- **Shared utility seams.** Provider mirroring, stream primitives, and `~/.pi/agent/*` path helpers are shared with `pi-credential-vault` through `@victor-software-house/pi-provider-utils`. MultiCodex still owns account storage, token policy, footer behavior, and command UX.
+- **Provider utilities.** MultiCodex includes its provider mirroring, stream primitives, and `~/.pi/agent/*` path helpers so it uses the same Pi package namespace as the host. MultiCodex also owns account storage, token policy, footer behavior, and command UX.
 
 ## Local development
 

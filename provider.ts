@@ -1,19 +1,18 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-	type Api,
-	type AssistantMessageEventStream,
-	type Context,
-	type Model,
-	type SimpleStreamOptions,
-	type ThinkingLevelMap,
+import type {
+	Api,
+	AssistantMessageEventStream,
+	Context,
+	Model,
+	SimpleStreamOptions,
+	ThinkingLevelMap,
 } from "@earendil-works/pi-ai";
 import { getApiProvider, getModels } from "@earendil-works/pi-ai/compat";
 import {
 	type ExtensionAPI,
 	getAgentDir,
 } from "@earendil-works/pi-coding-agent";
-import { mirrorProvider } from "pi-provider-utils/providers";
 import type { AccountManager } from "./account-manager";
 import { createStreamWrapper } from "./stream-wrapper";
 
@@ -291,14 +290,14 @@ export function getOpenAICodexMirror(): {
 	baseUrl: string;
 	models: ProviderModelDef[];
 } {
-	const mirror = mirrorProvider("openai-codex");
 	const sourceModels = getModels("openai-codex");
-	if (!mirror || sourceModels.length === 0) {
+	const firstModel = sourceModels[0];
+	if (!firstModel) {
 		return { baseUrl: "https://chatgpt.com/backend-api", models: [] };
 	}
 	const overrides = readOpenAICodexModelOverrides();
 	return {
-		baseUrl: mirror.baseUrl,
+		baseUrl: firstModel.baseUrl ?? "https://chatgpt.com/backend-api",
 		models: sourceModels.map((m) =>
 			applyOpenAICodexModelOverride(
 				Object.assign(

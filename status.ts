@@ -10,12 +10,12 @@ import {
 	SettingsList,
 	Text,
 } from "@earendil-works/pi-tui";
+import type { AccountManager } from "./account-manager";
 import {
 	getAgentSettingsPath,
 	readJsonObjectFileAsync,
 	writeJsonObjectFileAsync,
-} from "pi-provider-utils/agent-paths";
-import type { AccountManager } from "./account-manager";
+} from "./agent-paths";
 import { isStaleExtensionContextError } from "./context-utils";
 import { PROVIDER_ID } from "./provider";
 import { type CodexUsageSnapshot, formatResetAt } from "./usage";

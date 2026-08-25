@@ -5,6 +5,9 @@ type OAuth = NonNullable<
 	ReturnType<typeof builtinProviders>[number]["auth"]["oauth"]
 >;
 type AuthInteraction = Parameters<OAuth["login"]>[0];
+type OptionalSignalAuthInteraction = Omit<AuthInteraction, "signal"> & {
+	signal?: AbortSignal;
+};
 
 let cachedOAuth: OAuth | undefined;
 
@@ -19,7 +22,7 @@ function getOAuth(): OAuth {
 }
 
 export async function loginOAuthToken(
-	interaction: AuthInteraction,
+	interaction: OptionalSignalAuthInteraction,
 ): Promise<OAuthCredentials> {
 	return getOAuth().login({
 		...interaction,
@@ -29,11 +32,15 @@ export async function loginOAuthToken(
 
 export async function refreshOAuthToken(
 	refreshToken: string,
+	signal: AbortSignal = new AbortController().signal,
 ): Promise<OAuthCredentials> {
-	return getOAuth().refresh({
-		type: "oauth",
-		access: "",
-		refresh: refreshToken,
-		expires: 0,
-	});
+	return getOAuth().refresh(
+		{
+			type: "oauth",
+			access: "",
+			refresh: refreshToken,
+			expires: 0,
+		},
+		signal,
+	);
 }
