@@ -553,6 +553,7 @@ describe("manual account selection", () => {
 			headers?: Record<string, string>;
 			apiKey?: string;
 			customOption?: string;
+			transport?: string;
 		}> = [];
 
 		const accountManager = {
@@ -570,12 +571,17 @@ describe("manual account selection", () => {
 			streamSimple: (
 				model: { headers?: Record<string, string> },
 				_context: unknown,
-				options?: { apiKey?: string; customOption?: string },
+				options?: {
+					apiKey?: string;
+					customOption?: string;
+					transport?: string;
+				},
 			) => {
 				captured.push({
 					headers: model.headers,
 					apiKey: options?.apiKey,
 					customOption: options?.customOption,
+					transport: options?.transport,
 				});
 				async function* inner() {
 					yield { type: "done" };
@@ -612,6 +618,7 @@ describe("manual account selection", () => {
 				},
 				apiKey: "selected-token",
 				customOption: "preserved",
+				transport: "sse",
 			},
 		]);
 		expect(model.headers).toEqual({ Existing: "yes" });

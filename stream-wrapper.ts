@@ -7,7 +7,6 @@ import {
 	type Model,
 	type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { closeOpenAICodexWebSocketSessions } from "@earendil-works/pi-ai/api/openai-codex-responses";
 import type { AccountManager } from "./account-manager";
 import { isQuotaErrorMessage } from "./quota";
 import {
@@ -32,15 +31,9 @@ export function setCloseCodexWebSocketSessionsForTest(
 async function closeCachedCodexWebSocketSession(
 	sessionId: string | undefined,
 ): Promise<void> {
-	if (!sessionId) return;
-
+	if (!sessionId || !closeCodexWebSocketSessionsForTest) return;
 	try {
-		if (closeCodexWebSocketSessionsForTest) {
-			await closeCodexWebSocketSessionsForTest(sessionId);
-			return;
-		}
-
-		await closeOpenAICodexWebSocketSessions(sessionId);
+		await closeCodexWebSocketSessionsForTest(sessionId);
 	} catch (error) {
 		if (warnedWebSocketCleanupFailure) return;
 		warnedWebSocketCleanupFailure = true;
@@ -120,11 +113,6 @@ export function createStreamWrapper(
 						throw error;
 					}
 					accountManager.setRuntimeActiveAccount?.(account.email);
-					// The upstream Codex provider caches WebSocket sessions by sessionId.
-					// If a session was opened with a different Codex account, passing a new
-					// apiKey is not enough: the cached socket can keep using the old account.
-					// Close it before each managed stream so the selected Multicodex account is
-					// the one that authenticates the next Codex connection.
 					await closeCachedCodexWebSocketSession(options?.sessionId);
 					const abortController = createLinkedAbortController(options?.signal);
 
@@ -147,6 +135,8 @@ export function createStreamWrapper(
 							...options,
 							apiKey: token,
 							signal: abortController.signal,
+							// Cached WebSockets can retain the prior account for a session.
+							transport: "sse",
 						},
 					);
 
