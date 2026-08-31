@@ -572,7 +572,8 @@ export class AccountManager {
 				options?.signal?.aborted ||
 				isAbortError(error) ||
 				message === "fetch failed" ||
-				message === "operation was aborted"
+				message === "operation was aborted" ||
+				message.startsWith("Timed out waiting for shared usage cache lock:")
 			) {
 				return undefined;
 			}
