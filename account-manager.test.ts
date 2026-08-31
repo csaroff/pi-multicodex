@@ -74,6 +74,27 @@ describe("AccountManager usage warnings", () => {
 		).resolves.toBeUndefined();
 		expect(warningHandler).not.toHaveBeenCalled();
 	});
+
+	it("keeps transient polling failures out of resumed sessions", async () => {
+		// A laptop wake can make many live Pi sessions refresh their footers together.
+		// Temporary telemetry loss should leave usage unknown, not append warning spam.
+		mocks.getOrFetchSharedUsage.mockRejectedValueOnce(
+			new TypeError("fetch failed"),
+		);
+		const manager = new AccountManager();
+		const warningHandler = vi.fn();
+		manager.setWarningHandler(warningHandler);
+		const account = manager.addOrUpdateAccount("polling@example.com", {
+			access: "access",
+			refresh: "refresh",
+			expires: Date.now() + 3600_000,
+		});
+
+		await expect(
+			manager.refreshUsageForAccount(account),
+		).resolves.toBeUndefined();
+		expect(warningHandler).not.toHaveBeenCalled();
+	});
 });
 
 describe("AccountManager usage cache", () => {
