@@ -95,6 +95,29 @@ describe("AccountManager usage warnings", () => {
 		).resolves.toBeUndefined();
 		expect(warningHandler).not.toHaveBeenCalled();
 	});
+
+	it("keeps shared usage lock contention out of resumed sessions", async () => {
+		// Another Pi process owning the account's refresh is normal coordination.
+		// Timing out should preserve cached footer data without alarming the user.
+		mocks.getOrFetchSharedUsage.mockRejectedValueOnce(
+			new Error(
+				"Timed out waiting for shared usage cache lock: /tmp/account.lock",
+			),
+		);
+		const manager = new AccountManager();
+		const warningHandler = vi.fn();
+		manager.setWarningHandler(warningHandler);
+		const account = manager.addOrUpdateAccount("contended@example.com", {
+			access: "access",
+			refresh: "refresh",
+			expires: Date.now() + 3600_000,
+		});
+
+		await expect(
+			manager.refreshUsageForAccount(account),
+		).resolves.toBeUndefined();
+		expect(warningHandler).not.toHaveBeenCalled();
+	});
 });
 
 describe("AccountManager usage cache", () => {
