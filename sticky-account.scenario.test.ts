@@ -120,6 +120,56 @@ describe("sticky account selection across sessions", () => {
 		expect(new AccountManager().hasManualAccount()).toBe(false);
 	});
 
+	it.each([
+		"quota",
+		"auth",
+	] as const)("keeps the saved email when a request falls back after a %s failure", async (failure) => {
+		const { AccountManager, manager, command } = await setup();
+		const { createStreamWrapper } = await import("./stream-wrapper");
+		const { createErrorAssistantMessage } = await import("./stream-utils");
+		const { getModels } = await import("@earendil-works/pi-ai/compat");
+		const model = getModels("openai-codex")[0];
+		if (!model) throw new Error("Missing Codex model fixture");
+		await command(manager)("use b@example.com");
+		if (failure === "auth") {
+			vi.spyOn(manager, "ensureValidToken").mockRejectedValueOnce(
+				new Error("invalid_grant"),
+			);
+		}
+		const message = createErrorAssistantMessage(
+			model,
+			"HTTP 429 Too Many Requests",
+		);
+		const served: string[] = [];
+		const wrapper = createStreamWrapper(manager, {
+			streamSimple: ((request: typeof model) =>
+				(async function* () {
+					const email = request.headers?.["X-Multicodex-Account"] ?? "";
+					served.push(email);
+					if (email === "b@example.com") {
+						yield { type: "error", reason: "error", error: message };
+					} else {
+						yield {
+							type: "done",
+							reason: "stop",
+							message: {
+								...message,
+								stopReason: "stop",
+								errorMessage: undefined,
+							},
+						};
+					}
+				})()) as never,
+		});
+		const events = await Array.fromAsync(wrapper(model, { messages: [] }));
+		expect(events.at(-1)?.type).toBe("done");
+		expect(served.at(-1)).toBe("a@example.com");
+		expect(manager.hasManualAccount()).toBe(false);
+		expect(new AccountManager().getManualAccount()?.email).toBe(
+			"b@example.com",
+		);
+	});
+
 	it("clears the saved preference when its account is removed", async () => {
 		const { AccountManager, manager, command } = await setup();
 		await command(manager)("use b@example.com");

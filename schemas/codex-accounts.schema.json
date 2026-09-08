@@ -22,6 +22,11 @@
 		"activeEmail": {
 			"description": "Currently active account email",
 			"type": "string"
+		},
+		"manualEmail": {
+			"description": "Last explicitly selected email; sticky across sessions until reset",
+			"type": "string",
+			"minLength": 1
 		}
 	},
 	"required": ["version", "accounts"],

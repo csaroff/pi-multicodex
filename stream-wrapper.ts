@@ -85,7 +85,7 @@ export function createStreamWrapper(
 					let account = manual;
 					if (!account) {
 						if (accountManager.hasManualAccount()) {
-							accountManager.clearManualAccount();
+							accountManager.clearManualAccount({ persist: false });
 						}
 						account = await accountManager.activateBestAccount({
 							excludeEmails: excludedEmails,
@@ -104,7 +104,7 @@ export function createStreamWrapper(
 					} catch (error) {
 						accountManager.notifyRotationSkipForAuthFailure(account, error);
 						if (usingManual) {
-							accountManager.clearManualAccount();
+							accountManager.clearManualAccount({ persist: false });
 						}
 						excludedEmails.add(account.email);
 						if (attempt < MAX_ROTATION_RETRIES) {
@@ -163,7 +163,7 @@ export function createStreamWrapper(
 							}
 						}
 						if (usingManual) {
-							accountManager.clearManualAccount();
+							accountManager.clearManualAccount({ persist: false });
 						}
 						excludedEmails.add(account.email);
 						abortController.abort();

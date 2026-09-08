@@ -27,6 +27,7 @@ The current shipped behavior is:
 - The usage footer displays severity-based color tiers that shift as quota depletes.
 - Footer settings are stored in `~/.pi/agent/settings.json` under `pi-multicodex`.
 - Managed account storage is stored in `~/.pi/agent/codex-accounts.json`.
+- The most recently selected email is saved across sessions. `/multicodex reset manual` unsets it; quota/auth fallback suspends the pin for the current session without erasing the saved choice.
 - The behavior contract (selection priority, retry policy, manual override, error classification) is documented in README.
 - Rotation criteria are still hard-coded but fully documented.
 
@@ -295,7 +296,7 @@ Goal: confirm runtime behavior stays correct as the command model and controller
 ### Work items
 
 - [ ] Review whether session restoration should also handle `session_tree` and `session_fork` in addition to the current startup and switch events
-- [ ] Confirm manual override semantics remain correct across reloads and new sessions
+- [x] Persist explicit account selection across reloads and new sessions, with durable reset and session-local failure fallback
 - [ ] Confirm status refresh paths do not leave stale footer state behind after model changes or shutdown
 - [ ] Re-check hook responsibilities after controller extraction so startup, switch, and refresh logic stay narrow
 

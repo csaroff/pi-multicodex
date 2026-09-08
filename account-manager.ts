@@ -59,6 +59,7 @@ export class AccountManager {
 
 	constructor() {
 		this.data = loadStorage();
+		this.manualEmail = this.data.manualEmail;
 		const sharedUsage = loadSharedUsageCache();
 		const now = Date.now();
 		for (const account of this.data.accounts) {
@@ -89,7 +90,11 @@ export class AccountManager {
 		return this.readyPromise;
 	}
 
-	private save(): void {
+	private save(selection?: { manualEmail?: string }): void {
+		// Routine writes from an older session must not undo a newer selection/reset.
+		this.data.manualEmail = selection
+			? selection.manualEmail
+			: loadStorage().manualEmail;
 		saveStorage(this.data);
 	}
 
@@ -384,16 +389,16 @@ export class AccountManager {
 
 	getManualAccount(): Account | undefined {
 		if (!this.manualEmail) return undefined;
-		const account = this.getAccount(this.manualEmail);
-		if (!account) {
-			this.manualEmail = undefined;
-			return undefined;
-		}
-		return account;
+		// The selected pi-auth identity may not be loaded yet during startup.
+		return this.getAccount(this.manualEmail);
 	}
 
 	hasManualAccount(): boolean {
 		return Boolean(this.manualEmail);
+	}
+
+	getSavedManualEmail(): string | undefined {
+		return loadStorage().manualEmail;
 	}
 
 	setActiveAccount(email: string): void {
@@ -409,13 +414,16 @@ export class AccountManager {
 		this.runtimeActiveEmail = undefined;
 		this.manualEmail = email;
 		account.lastUsed = Date.now();
+		this.save({ manualEmail: email });
 		this.notifyStateChanged();
 	}
 
-	clearManualAccount(): void {
-		if (!this.manualEmail) return;
+	clearManualAccount(options?: { persist?: boolean }): void {
 		this.runtimeActiveEmail = undefined;
 		this.manualEmail = undefined;
+		if (options?.persist !== false) {
+			this.save({ manualEmail: undefined });
+		}
 		this.notifyStateChanged();
 	}
 
@@ -504,7 +512,11 @@ export class AccountManager {
 		if (!account) return false;
 		const removed = this.removeAccountRecord(account);
 		if (!removed) return false;
-		this.save();
+		this.save(
+			this.getSavedManualEmail() === email
+				? { manualEmail: undefined }
+				: undefined,
+		);
 		this.notifyStateChanged();
 		return true;
 	}

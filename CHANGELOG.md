@@ -1,3 +1,9 @@
+## Unreleased
+
+### Features
+
+- Remember the last explicitly selected email across sessions. `/multicodex reset manual` unsets it; `/multicodex rotation` shows the saved choice. Quota/auth fallback suspends the pin for the current session without forgetting it. Select an email once after upgrading to enable persistence.
+
 ## [2.3.1](https://github.com/victor-software-house/pi-multicodex/compare/v2.3.0...v2.3.1) (2026-03-30)
 
 

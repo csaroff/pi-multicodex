@@ -27,9 +27,11 @@ When you start a session, MultiCodex:
 3. Checks usage data across all managed accounts.
 4. Picks the best available account — untouched accounts first, then the one whose weekly reset window ends soonest, then a random available account as fallback.
 
-If you pin a specific account from `/multicodex accounts` or `/multicodex use`, that account is used until it hits quota, fails auth validation, or you clear the override.
+The last email you select from `/multicodex accounts` or `/multicodex use <email>` is **sticky across sessions**. New sessions use that account rather than automatically selecting another. Use `/multicodex reset manual` to unset the saved choice and return to automatic selection; `/multicodex rotation` shows the saved email.
 
-When a request hits a quota or rate limit **before** any output is streamed, MultiCodex marks that account exhausted, picks the next available one, and retries. This happens up to 5 times transparently. If token validation or token refresh fails before the request starts, MultiCodex skips that account and retries another healthy one. If the manual override account fails, the override is cleared and rotation continues with the remaining accounts. Once output has started streaming, the error is surfaced as-is — no mid-stream account switching.
+The saved choice is shared by sessions using the same pi agent directory. Already-running sessions keep their current selection; new sessions and reloads pick up the latest saved email. Automatic fallback does not replace your saved choice. Removing the selected account clears it. Existing `activeEmail` values from older versions are not treated as pins: select your email once after upgrading.
+
+When a request hits a quota or rate limit **before** any output is streamed, MultiCodex marks that account exhausted, picks the next available one, and retries. This happens up to 5 times transparently. If token validation or token refresh fails before the request starts, MultiCodex skips that account and retries another healthy one. If the selected account fails, its pin is suspended for the rest of that session and rotation continues with the remaining accounts. The saved email is retained, so a new session tries it again if available. Once output has started streaming, the error is surfaced as-is — no mid-stream account switching.
 
 ## Commands
 
@@ -44,10 +46,10 @@ Everything lives under one command: `/multicodex`.
 | `/multicodex refresh [identifier\|all]` | Refresh token validity and usage data for one account or all accounts |
 | `/multicodex reauth [identifier]` | Re-authenticate one account explicitly |
 | `/multicodex footer` | Configure the usage footer display |
-| `/multicodex rotation` | Show the current rotation policy |
+| `/multicodex rotation` | Show the saved email and current rotation policy |
 | `/multicodex verify` | Check storage, settings, auth import, and reauth health |
 | `/multicodex path` | Print storage and settings file locations |
-| `/multicodex reset [manual\|quota\|all]` | Clear manual override, quota cooldowns, or both |
+| `/multicodex reset [manual\|quota\|all]` | Unset the saved email, clear quota cooldowns, or both |
 | `/multicodex help` | Print a compact usage line |
 
 All subcommands support dynamic autocomplete. Account-focused subcommands autocomplete from the managed account list.
@@ -60,7 +62,7 @@ The `/multicodex accounts` panel merges the old `show` and `use` flows into one 
 
 ![MultiCodex use picker](./assets/multicodex-use-picker.png)
 
-- **enter** activates the highlighted account.
+- **enter** activates the highlighted account and saves it for future sessions.
 - **u** refreshes token and usage health for the selected account.
 - **r** re-authenticates the selected account.
 - **n** starts login for a new managed account.
@@ -119,7 +121,7 @@ MultiCodex stores all data locally under `~/.pi/agent/`:
 
 | File | Contents |
 |---|---|
-| `codex-accounts.json` | Managed account credentials and state |
+| `codex-accounts.json` | Managed account credentials, state, and sticky selection (`manualEmail`) |
 | `codex-usage-cache.json` | Shared, credential-free usage snapshots for all pi profiles |
 | `settings.json` (key `pi-multicodex`) | Footer display preferences |
 

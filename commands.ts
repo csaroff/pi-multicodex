@@ -260,7 +260,10 @@ async function loginAndActivateAccount(
 
 		const account = accountManager.addOrUpdateAccount(identifier, creds);
 		accountManager.setManualAccount(account.email);
-		ctx.ui.notify(`Now using ${account.email}`, "info");
+		ctx.ui.notify(
+			`Now using ${account.email} (saved across sessions; /multicodex reset manual to unset)`,
+			"info",
+		);
 		return account.email;
 	} catch (error) {
 		ctx.ui.notify(`Login failed: ${normalizeUnknownError(error)}`, "error");
@@ -279,7 +282,10 @@ async function useOrLoginAccount(
 		try {
 			await accountManager.ensureValidToken(existing);
 			accountManager.setManualAccount(existing.email);
-			ctx.ui.notify(`Now using ${existing.email}`, "info");
+			ctx.ui.notify(
+				`Now using ${existing.email} (saved across sessions; /multicodex reset manual to unset)`,
+				"info",
+			);
 			return;
 		} catch {
 			ctx.ui.notify(
@@ -735,8 +741,11 @@ async function runFooterSubcommand(
 
 async function runRotationSubcommand(
 	ctx: ExtensionCommandContext,
+	accountManager: AccountManager,
 ): Promise<void> {
 	const lines = [
+		`Saved selection: ${accountManager.getSavedManualEmail() ?? "none (automatic)"}. Select with /multicodex use <email>; unset with /multicodex reset manual.`,
+		"Selections stick across sessions. Quota/auth failures suspend the pin for this session without forgetting the saved email.",
 		"Current policy: manual account first, then untouched accounts, then earliest weekly reset, then random fallback.",
 		"If token validation fails before a request starts, MultiCodex skips that account and retries another one.",
 		"If a request hits quota or rate limit before any output streams, MultiCodex marks the account on cooldown and retries.",
@@ -834,9 +843,9 @@ async function chooseResetTarget(
 	}
 
 	const options = [
-		"manual - clear manual account override",
+		"manual - unset saved email and return to automatic selection",
 		"quota - clear quota cooldown markers",
-		"all - clear manual override and quota cooldown markers",
+		"all - unset saved email and clear quota cooldown markers",
 	];
 	const selected = await ctx.ui.select("Reset MultiCodex State", options);
 	if (!selected) return undefined;
@@ -857,12 +866,14 @@ async function runResetSubcommand(
 	if (target === "all" && ctx.hasUI) {
 		const confirmed = await ctx.ui.confirm(
 			"Reset MultiCodex state",
-			"Clear manual account override and all quota cooldown markers?",
+			"Unset saved email across sessions and clear all quota cooldown markers?",
 		);
 		if (!confirmed) return;
 	}
 
-	const hadManual = accountManager.hasManualAccount();
+	const hadManual =
+		accountManager.hasManualAccount() ||
+		Boolean(accountManager.getSavedManualEmail());
 	if (target === "manual" || target === "all") {
 		accountManager.clearManualAccount();
 	}
@@ -969,7 +980,7 @@ async function runSubcommand(
 		return;
 	}
 	if (subcommand === "rotation") {
-		await runRotationSubcommand(ctx);
+		await runRotationSubcommand(ctx, accountManager);
 		return;
 	}
 	if (subcommand === "verify") {

@@ -29,7 +29,7 @@ async function refreshAndActivateBestAccount(
 			return;
 		}
 		if (accountManager.hasManualAccount()) {
-			accountManager.clearManualAccount();
+			accountManager.clearManualAccount({ persist: false });
 		}
 		const selected = await accountManager.activateBestAccount({
 			refreshUsage: false,

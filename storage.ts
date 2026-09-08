@@ -60,6 +60,10 @@ export const StorageSchema = z
 			.string()
 			.optional()
 			.meta({ description: "Currently active account email" }),
+		manualEmail: z.string().min(1).optional().meta({
+			description:
+				"Last explicitly selected email; sticky across sessions until reset",
+		}),
 	})
 	.meta({
 		id: "MultiCodexStorage",
@@ -177,6 +181,7 @@ export function saveStorage(data: StorageData): void {
 			version: CURRENT_VERSION,
 			accounts: data.accounts,
 			activeEmail: data.activeEmail,
+			manualEmail: data.manualEmail,
 		};
 		fs.writeFileSync(STORAGE_FILE, JSON.stringify(output, null, 2));
 	} catch (error) {
