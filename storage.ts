@@ -1,77 +1,108 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { z } from "zod";
 import { getAgentPath } from "./agent-paths";
-
-// ---------------------------------------------------------------------------
-// Schema
-// ---------------------------------------------------------------------------
 
 const CURRENT_VERSION = 1;
 
 const SCHEMA_URL =
 	"https://raw.githubusercontent.com/victor-software-house/pi-multicodex/main/schemas/codex-accounts.schema.json";
 
-const AccountSchema = z
-	.object({
-		email: z.string().min(1).meta({ description: "Account email identifier" }),
-		accessToken: z
-			.string()
-			.min(1)
-			.meta({ description: "OAuth access token (JWT)" }),
-		refreshToken: z
-			.string()
-			.min(1)
-			.meta({ description: "OAuth refresh token" }),
-		expiresAt: z
-			.number()
-			.meta({ description: "Token expiry timestamp (ms since epoch)" }),
-		accountId: z.string().optional().meta({ description: "OpenAI account ID" }),
-		lastUsed: z
-			.number()
-			.optional()
-			.meta({ description: "Last manual selection timestamp (ms)" }),
-		quotaExhaustedUntil: z
-			.number()
-			.optional()
-			.meta({ description: "Quota cooldown expiry (ms)" }),
-		needsReauth: z
-			.boolean()
-			.optional()
-			.meta({ description: "Account needs re-authentication" }),
-	})
-	.meta({ id: "Account", description: "A managed OpenAI Codex account" });
+export interface Account {
+	email: string;
+	accessToken: string;
+	refreshToken: string;
+	expiresAt: number;
+	accountId?: string;
+	lastUsed?: number;
+	quotaExhaustedUntil?: number;
+	needsReauth?: boolean;
+}
 
-export const StorageSchema = z
-	.object({
-		$schema: z
-			.string()
-			.optional()
-			.meta({ description: "JSON Schema reference for editor support" }),
-		version: z
-			.number()
-			.int()
-			.positive()
-			.meta({ description: "Storage schema version" }),
-		accounts: z
-			.array(AccountSchema)
-			.meta({ description: "Managed account entries" }),
-		activeEmail: z
-			.string()
-			.optional()
-			.meta({ description: "Currently active account email" }),
-		manualEmail: z.string().min(1).optional().meta({
-			description:
-				"Last explicitly selected email; sticky across sessions until reset",
-		}),
-	})
-	.meta({
-		id: "MultiCodexStorage",
-		description: "MultiCodex managed account storage",
-	});
+export interface StorageData {
+	$schema?: string;
+	version: number;
+	accounts: Account[];
+	activeEmail?: string;
+	manualEmail?: string;
+}
 
-export type Account = z.infer<typeof AccountSchema>;
-export type StorageData = z.infer<typeof StorageSchema>;
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalString(record: Record<string, unknown>, key: string): boolean {
+	return record[key] === undefined || typeof record[key] === "string";
+}
+
+function optionalNumber(record: Record<string, unknown>, key: string): boolean {
+	return record[key] === undefined || typeof record[key] === "number";
+}
+
+function parseAccount(value: unknown): Account | undefined {
+	if (!isRecord(value)) return undefined;
+	if (typeof value.email !== "string" || value.email.length === 0)
+		return undefined;
+	if (typeof value.accessToken !== "string" || value.accessToken.length === 0)
+		return undefined;
+	if (typeof value.refreshToken !== "string" || value.refreshToken.length === 0)
+		return undefined;
+	if (typeof value.expiresAt !== "number") return undefined;
+	if (!optionalString(value, "accountId")) return undefined;
+	if (
+		!optionalNumber(value, "lastUsed") ||
+		!optionalNumber(value, "quotaExhaustedUntil")
+	)
+		return undefined;
+	if (value.needsReauth !== undefined && typeof value.needsReauth !== "boolean")
+		return undefined;
+	return {
+		email: value.email,
+		accessToken: value.accessToken,
+		refreshToken: value.refreshToken,
+		expiresAt: value.expiresAt,
+		...(typeof value.accountId === "string"
+			? { accountId: value.accountId }
+			: {}),
+		...(typeof value.lastUsed === "number" ? { lastUsed: value.lastUsed } : {}),
+		...(typeof value.quotaExhaustedUntil === "number"
+			? { quotaExhaustedUntil: value.quotaExhaustedUntil }
+			: {}),
+		...(typeof value.needsReauth === "boolean"
+			? { needsReauth: value.needsReauth }
+			: {}),
+	};
+}
+
+function parseCompleteStorage(
+	value: Record<string, unknown>,
+): StorageData | undefined {
+	if (!Number.isInteger(value.version) || (value.version as number) <= 0)
+		return undefined;
+	if (!Array.isArray(value.accounts)) return undefined;
+	if (
+		!optionalString(value, "$schema") ||
+		!optionalString(value, "activeEmail")
+	)
+		return undefined;
+	if (
+		value.manualEmail !== undefined &&
+		(typeof value.manualEmail !== "string" || value.manualEmail.length === 0)
+	)
+		return undefined;
+	const accounts = value.accounts.map(parseAccount);
+	if (accounts.some((account) => account === undefined)) return undefined;
+	return {
+		...(typeof value.$schema === "string" ? { $schema: value.$schema } : {}),
+		version: value.version as number,
+		accounts: accounts as Account[],
+		...(typeof value.activeEmail === "string"
+			? { activeEmail: value.activeEmail }
+			: {}),
+		...(typeof value.manualEmail === "string"
+			? { manualEmail: value.manualEmail }
+			: {}),
+	};
+}
 
 // ---------------------------------------------------------------------------
 // Migration
@@ -114,18 +145,14 @@ function migrateRawStorage(raw: unknown): StorageData {
 		record.version = CURRENT_VERSION;
 	}
 
-	const result = StorageSchema.safeParse(record);
-	if (result.success) {
-		return result.data;
-	}
+	const parsed = parseCompleteStorage(record);
+	if (parsed) return parsed;
 
 	// Schema validation failed — salvage what we can
 	const accounts: Account[] = [];
 	for (const entry of rawAccounts) {
-		const parsed = AccountSchema.safeParse(entry);
-		if (parsed.success) {
-			accounts.push(parsed.data);
-		}
+		const account = parseAccount(entry);
+		if (account) accounts.push(account);
 	}
 	return { version: CURRENT_VERSION, accounts, activeEmail: undefined };
 }

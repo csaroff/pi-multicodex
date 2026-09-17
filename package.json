@@ -16,7 +16,7 @@
 	],
 	"pi": {
 		"extensions": [
-			"./index.ts"
+			"./extension.ts"
 		],
 		"image": "https://raw.githubusercontent.com/victor-software-house/pi-multicodex/main/assets/multicodex-main.png"
 	},
@@ -99,12 +99,10 @@
 		"conventional-changelog-conventionalcommits": "^9.3.0",
 		"semantic-release": "^25.0.3",
 		"typescript": "^5.9.3",
-		"vitest": "^4.1.0"
+		"vitest": "^4.1.0",
+		"zod": "^4.3.6"
 	},
 	"engines": {
 		"node": ">=24.14.0 <26"
-	},
-	"dependencies": {
-		"zod": "^4.3.6"
 	}
 }
