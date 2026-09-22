@@ -114,6 +114,23 @@ describe("installMulticodexProviderWrapper", () => {
 		expect(calls).toEqual(["built-in:selected-token"]);
 	});
 
+	it("preserves models added to Pi's catalog after MultiCodex was published", () => {
+		const calls: string[] = [];
+		mocks.currentProvider = makeDelegate("built-in", calls);
+		const registerProvider = vi.fn((_id: string, config: unknown) => {
+			mocks.currentProvider = config;
+		});
+
+		const config = installMulticodexProviderWrapper(
+			{ registerProvider },
+			makeAccountManager(),
+		);
+
+		// Supplying a models array replaces Pi's live catalog with the extension's
+		// package-time snapshot, hiding same-day releases such as GPT-6 Sol.
+		expect(config).not.toHaveProperty("models");
+	});
+
 	it("wraps a later provider override instead of the stale built-in delegate", async () => {
 		const calls: string[] = [];
 		mocks.currentProvider = makeDelegate("built-in", calls);
