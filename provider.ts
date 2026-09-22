@@ -384,7 +384,6 @@ export function buildMulticodexProviderConfig(
 		apiKey: getActiveApiKey(accountManager),
 		api: CODEX_RESPONSES_API,
 		streamSimple: createStreamWrapper(accountManager, baseProvider),
-		models: mirror.models,
 	};
 
 	Object.defineProperty(config, MULTICODEX_PROVIDER_MARKER, {

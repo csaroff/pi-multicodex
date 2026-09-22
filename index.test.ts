@@ -156,7 +156,7 @@ describe("getOpenAICodexMirror", () => {
 });
 
 describe("buildMulticodexProviderConfig", () => {
-	it("uses mirrored models and baseUrl", () => {
+	it("inherits provider models and uses the mirrored baseUrl", () => {
 		const mirror = getOpenAICodexMirror();
 		const fakeManager = {
 			getActiveAccount: () => ({
@@ -170,7 +170,7 @@ describe("buildMulticodexProviderConfig", () => {
 		expect(config.api).toBe("openai-codex-responses");
 		expect(config.apiKey).toBe("test-jwt.eyJ0ZXN0IjoxfQ.sig");
 		expect(config.baseUrl).toBe(mirror.baseUrl);
-		expect(config.models).toEqual(mirror.models);
+		expect(config).not.toHaveProperty("models");
 		expect(typeof config.streamSimple).toBe("function");
 	});
 });
